@@ -1,0 +1,110 @@
+html, body {
+    background-color: black;
+    overflow: hidden;
+}
+
+form {
+    background-color: rgba(255, 255, 255, 0.5);
+    padding: 20px;
+    border-radius: 5px;
+    text-align: center;
+}
+
+form input[type="text"],
+form input[type="password"],
+form input[type="email"] {
+    width: 80%;
+    padding: 10px;
+    margin: 10px auto;
+    border: 1px solid #ccc;
+}
+
+form input[type="submit"] {
+    width: 80%;
+    padding: 10px;
+    border-radius: 5px;
+    border: none;
+    color: white;
+    background-color: #5C6BC0;
+    cursor: pointer;
+}
+
+.link-like {
+    color: white;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.link-like:hover {
+    color: #ffeb3b;
+}
+
+#displayLeaderboard {
+  position: absolute;
+  padding: 8px;
+  font-size: 38px;
+  user-select: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+}
+
+#displayLeaderboard > div {
+  margin-bottom: 8px;
+}
+
+.prompt {
+    font-family: 'Arial';
+    font-size: 24px;
+    color: #ffffff;
+    background-color: #000000;
+    padding: 10px 20px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 1000;
+    border-radius: 5px;
+  }
+  
+  .prompt-button {
+    font-family: 'Arial';
+    font-size: 18px;
+    color: #ffffff;
+    background-color: #5C6BC0;
+    padding: 5px 10px;
+    margin: 10px;
+    cursor: pointer;
+    display: inline-block;
+    text-align: center;
+    border-radius: 5px;
+    border: none;
+  }
+  
+  .prompt-button-yes {
+    display: inline-block;
+    margin-right: 10px;
+  }
+  
+  .prompt-button-no {
+    display: inline-block;
+    margin-left: 10px;
+  }
+  
+  .prompt-input {
+    font-family: 'Arial';
+    font-size: 18px;
+    padding: 5px;
+    margin: 10px;
+    width: 50%;
+  }
+
+  #overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+  }
