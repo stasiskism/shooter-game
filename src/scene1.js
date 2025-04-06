@@ -15,7 +15,7 @@ class Scene1 extends Phaser.Scene {
         this.load.image('login', 'assets/Login_Button.png')
         this.load.image('demo', 'assets/Demo_Button.png')
         this.load.image('register', 'assets/Register_Button.png')
-        this.load.image('code', 'assets/Code_Button.png')
+        this.load.image('code', 'assets/ROOMS_LIST_Button.png')
         this.load.image('ready', 'assets/Ready_Button.png')
         this.load.spritesheet('WalkUp', 'assets/Soldier/WALK/SMS_Soldier_WALK_NORTH_strip4.png', { frameWidth: 16, frameHeight: 24 });
         this.load.spritesheet('WalkLeft', 'assets/Soldier/WALK/SMS_Soldier_WALK_WEST_strip4.png', { frameWidth: 16, frameHeight: 24 });
