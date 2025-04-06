@@ -28,11 +28,11 @@ class Lobby extends Phaser.Scene {
         this.createButton.on('pointerover', () => this.createButton.setTint(0xf1c40f));
         this.createButton.on('pointerout', () => this.createButton.clearTint());
 
-        this.codeButton = this.add.sprite(1920 / 2, (1080 / 2), 'code');
-        this.codeButton.setInteractive({ useHandCursor: true });
-        this.codeButton.on('pointerdown', () => this.showRoomList());
-        this.codeButton.on('pointerover', () => this.codeButton.setTint(0xf1c40f));
-        this.codeButton.on('pointerout', () => this.codeButton.clearTint());
+        this.listButton = this.add.sprite(1920 / 2, (1080 / 2), 'RoomsList');
+        this.listButton.setInteractive({ useHandCursor: true });
+        this.listButton.on('pointerdown', () => this.showRoomList());
+        this.listButton.on('pointerover', () => this.listButton.setTint(0xf1c40f));
+        this.listButton.on('pointerout', () => this.listButton.clearTint());
 
         this.searchButton = this.add.sprite(1920 / 2, (1080 / 2) + 170, 'Search');
         this.searchButton.setInteractive({ useHandCursor: true });
@@ -282,14 +282,14 @@ class Lobby extends Phaser.Scene {
 
     disableButtons() {
         this.createButton.disableInteractive();
-        this.codeButton.disableInteractive();
+        this.listButton.disableInteractive();
         this.searchButton.disableInteractive();
         this.exitButton.disableInteractive();
     }
 
     enableButtons() {
         this.createButton.setInteractive({ useHandCursor: true });
-        this.codeButton.setInteractive({ useHandCursor: true });
+        this.listButton.setInteractive({ useHandCursor: true });
         this.searchButton.setInteractive({ useHandCursor: true });
         this.exitButton.setInteractive({ useHandCursor: true });
     }
