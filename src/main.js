@@ -13,6 +13,7 @@ import Tutorial from './tutorial.js'
 import Lobby from './lobby.js'
 import Room from './room.js'
 import Spectator from './spectator.js'
+import Marketplace from './marketplace.js'
 
 
 const config = {
@@ -54,5 +55,6 @@ game.scene.add('tutorial', Tutorial)
 game.scene.add('lobby', Lobby)
 game.scene.add('room', Room)
 game.scene.add('spectator', Spectator)
+game.scene.add('marketplace', Marketplace)
 game.scene.start('scene1')
 
