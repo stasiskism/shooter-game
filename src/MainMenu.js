@@ -71,6 +71,7 @@ class MainMenu extends Phaser.Scene {
     this.objects = this.physics.add.staticGroup();
     this.singleplayerObject = this.objects.create(530, 613, 'singleplayer');
     this.multiplayerObject = this.objects.create(720, 613, 'multiplayer');
+    this.marketplaceObject = this.objects.create(910, 613, 'marketplace');
     this.tutorialObject = this.objects.create(1105, 613, 'tutorial');
 
     const newWidth = 150;
@@ -78,14 +79,17 @@ class MainMenu extends Phaser.Scene {
 
     this.singleplayerObject.setDisplaySize(newWidth, newHeight);
     this.multiplayerObject.setDisplaySize(newWidth, newHeight);
+    this.marketplaceObject.setDisplaySize(newWidth, newHeight);
     this.tutorialObject.setDisplaySize(newWidth, newHeight);
 
     this.singleplayerObject.body.setSize(newWidth, newHeight, true);
     this.multiplayerObject.body.setSize(newWidth, newHeight, true);
+    this.marketplaceObject.body.setSize(newWidth, newHeight, true);
     this.tutorialObject.body.setSize(newWidth, newHeight, true);
 
     this.singleplayerObject.body.setOffset((this.singleplayerObject.width - newWidth) / 2, (this.singleplayerObject.height - newHeight) / 2);
     this.multiplayerObject.body.setOffset((this.multiplayerObject.width - newWidth) / 2, (this.multiplayerObject.height - newHeight) / 2);
+    this.marketplaceObject.body.setOffset((this.marketplaceObject.width - newWidth) / 2, (this.marketplaceObject.height - newHeight) / 2);
     this.tutorialObject.body.setOffset((this.tutorialObject.width - newWidth) / 2, (this.tutorialObject.height - newHeight) / 2);
 
 
@@ -202,6 +206,8 @@ class MainMenu extends Phaser.Scene {
         message = 'Press E to start multiplayer';
       } else if (object === this.tutorialObject) {
         message = 'Press E to start tutorial';
+      } else if (object == this.marketplaceObject) {
+        message = 'Press E to go to marketplace'
       }
 
       this.popupText.setPosition(object.x - 100, object.y - 80);
@@ -221,6 +227,9 @@ class MainMenu extends Phaser.Scene {
       } else if (object === this.tutorialObject) {
         this.scene.start('tutorial', {username: this.username});
         this.scene.stop();
+      } else if (object === this.marketplaceObject) {
+        this.scene.start('marketplace', {username: this.username})
+        this.scene.stop()
       }
     }
   }
