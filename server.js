@@ -9,6 +9,8 @@ const bodyParser = require('body-parser')
 const { Pool } = require('pg');
 const nodemailer = require('nodemailer')
 const crypto = require('crypto')
+const stripe = require('stripe')('sk_test_51PJtjWP7nzuSu7T74zo0oHgD8swBsZMkud51DKwRHzgza3bPnRcHppcxfiqIiLhU35brBlqe3gJgjEv3NkU31GWb00dKn9t344');
+
 
 app.use(express.static('src'));
 
@@ -62,6 +64,57 @@ const availableWeapons = {}
 const availableGrenades = {}
 const token = {}
 
+app.post('/create-payment-intent', async (req, res) => {
+    const { amount, username } = req.body;
+  
+    let cost;
+    switch (amount) {
+      case 100:
+        cost = 100; // 1 EUR
+        break;
+      case 500:
+        cost = 400; // 4 EUR
+        break;
+      case 1000:
+        cost = 700; // 7 EUR
+        break;
+      default:
+        return res.status(400).json({ error: 'Invalid amount of coins' });
+    }
+  
+    try {
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: cost,
+        currency: 'eur',
+      });
+  
+      res.json({ clientSecret: paymentIntent.client_secret });
+    } catch (error) {
+      console.error('Error creating Payment Intent:', error);
+      res.status(500).json({ error: 'Failed to create Payment Intent' });
+    }
+  });
+  
+  app.post('/update-coins', async (req, res) => {
+      const { username, amount } = req.body;
+  
+      try {
+          const client = await sql.connect();
+          console.log('amount', amount, username)
+          await client.query('UPDATE user_profile SET coins = coins + $1 WHERE user_name = $2', [amount, username]);
+  
+          console.log(`Updating ${amount} coins for user ${username}`);
+          
+          const result = await client.query('SELECT coins FROM user_profile WHERE user_name = $1', [username]);
+          const data = result.rows[0];
+  
+          res.json({ success: true, coins: data.coins });
+          client.release();
+      } catch (error) {
+          console.error('Error updating coins:', error);
+          res.status(500).json({ success: false, error: 'Failed to update coins' });
+      }
+  });
 
 io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
@@ -702,6 +755,50 @@ io.on('connection', (socket) => {
         io.to(multiplayerId).emit('updateGunAnimation', playerId, animation, weapon)
     })
 
+    socket.on('buyGun', async (data) => {
+        try {
+            const { socket, weaponId } = data;
+            const username = playerUsername[socket];
+            const client = await sql.connect();
+            const result = await client.query('SELECT user_id FROM user_profile WHERE user_name = $1', [username]);
+            const costResult = await client.query('SELECT cost FROM marketplace WHERE item_id = $1', [weaponId])
+            const userId = result.rows[0].user_id;
+            const cost = costResult.rows[0].cost;
+            console.log('id', userId, weaponId, cost, username);
+            await client.query('UPDATE user_profile SET coins = coins - $1 WHERE user_name = $2', [cost, username]);
+            await client.query('INSERT INTO user_weapons (user_id, user_name, weapon_id) VALUES ($1, $2, $3)', [userId, username, weaponId]);
+            io.to(socket).emit('purchaseConfirmed', { weaponId });
+            client.release();
+        } catch(error) {
+            const client = await sql.connect();
+            console.error('Error buying weapon:', error);
+            await client.query('INSERT INTO error_logs (error_message) VALUES ($1)', [error]);
+            client.release();
+        }
+    });
+    
+    socket.on('buyGrenade', async (data) => {
+        try {
+            const { socket, grenadeId } = data;
+            const username = playerUsername[socket];
+            const client = await sql.connect();
+            const result = await client.query('SELECT user_id FROM user_profile WHERE user_name = $1', [username]);
+            const costResult = await client.query('SELECT cost FROM marketplace WHERE item_id = $1', [grenadeId])
+            const userId = result.rows[0].user_id;
+            const cost = costResult.rows[0].cost;
+            console.log('id', userId, grenadeId, cost, username);
+            await client.query('INSERT INTO user_grenades (user_id, user_name, grenade_id) VALUES ($1, $2, $3)', [userId, username, grenadeId]);
+            await client.query('UPDATE user_profile SET coins = coins - $1 WHERE user_name = $2', [cost, username]);
+            io.to(socket).emit('purchaseConfirmed', { grenadeId });
+            client.release();
+        } catch(error) {
+            const client = await sql.connect();
+            console.error('Error buying grenade:', error);
+            await client.query('INSERT INTO error_logs (error_message) VALUES ($1)', [error]);
+            client.release();
+        }
+    });
+
 
     
 
@@ -806,7 +903,27 @@ function reload(reloadTime, bullets, id) {
 }
 
 
-app.get('/getweapons', async (req, res) => {
+app.get('/get-info', async (req, res) => {
+    try {
+        const username = req.query.username
+        const client = await sql.connect()
+        const result = await client.query(`SELECT coins, level, xp FROM user_profile WHERE user_name = $1;`, [username])
+        const data = result.rows[0]
+
+        res.json({coins: data.coins, level: data.level, xp: data.xp})
+        client.release()
+        
+    }
+    catch (error) {
+        const client = await sql.connect()
+        console.error('Error fetching coins data:', error);
+        await client.query('INSERT INTO error_logs (error_message) VALUES ($1)', [error])
+        client.release()
+        res.status(500).json({ error: 'Internal server error' });
+    }
+})
+
+app.get('/get-weapons', async (req, res) => {
     try {
         const username = req.query.username
         const client = await sql.connect()
@@ -815,7 +932,6 @@ app.get('/getweapons', async (req, res) => {
         client.release();
         const userWeapons = resultWeapons.rows.map(row => row.weapon_id);
         const userGrenades = resultGrenades.rows.map(row => row.grenade_id);
-        console.log("granatos ", userGrenades)
         res.json({weapons: userWeapons, grenades: userGrenades})
     } catch (error) {
         const client = await sql.connect()
