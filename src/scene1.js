@@ -82,7 +82,14 @@ class Scene1 extends Phaser.Scene {
         this.load.image('create', 'assets/Room_Button.png');
         this.load.image('exit', 'assets/Exit_Button.png');
         this.load.image('plus', 'assets/Plus_Button.png');
-        this.load.image('chat', 'assets/chat.png')
+        this.load.image('chat', 'assets/chat.png');
+        this.load.image("tiles1", 'assets/marketplace/TX Plant.png');
+        this.load.image("tiles2", 'assets/marketplace/TX Props.png');
+        this.load.image("tiles3", 'assets/marketplace/TX Struct.png');
+        this.load.image("tiles4", 'assets/marketplace/TX Tileset Grass.png');
+        this.load.image("tiles5", 'assets/marketplace/TX Tileset Stone Ground.png');
+        this.load.image("tiles6", 'assets/marketplace/TX Tileset Wall.png');
+        this.load.tilemapTiledJSON('map1', 'assets/marketplace/maps_marketplace.json');
         this.load.image("tiles_multiplayer", 'assets/32x32_DEMO.png');
         this.load.tilemapTiledJSON('map2', 'assets/mapsss.json');
         this.load.image("tiles_multiplayer", 'assets/32x32_DEMO.png');
