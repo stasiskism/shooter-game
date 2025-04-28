@@ -37,11 +37,11 @@ class Room extends Phaser.Scene {
         this.frontendPlayers= {}
         this.setupScene()
         this.setupInputEvents()
-        this.add.text(1920 / 2, (1080 / 2) - 500, 'ROOM CODE: ' + this.roomId, {
+        this.add.text(10, 10, 'ROOM CODE: ' + this.roomId, {
             fontFamily: 'Berlin Sans FB Demi',
-            fontSize: '32px',
+            fontSize: '16px',
             fill: '#ffffff'
-        }).setOrigin(0.5).setScale(2);
+        }).setOrigin(0, 0);
         this.settingsButton = new SettingsButtonWithPanel(this, 1890, 90, this.roomId);
         this.events.on('settingsPanelOpened', this.onSettingsPanelOpened, this);
     }
