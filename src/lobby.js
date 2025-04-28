@@ -111,21 +111,42 @@ class Lobby extends Phaser.Scene {
             showMaxPlayersPrompt();
         };
 
-        const handleMaxPlayersSubmit = () => {
+       const handleMaxPlayersSubmit = () => {
             const maxPlayers = maxPlayersInput.value;
-            let roomName = roomNameInput.value || `${this.username} Room`;
-            console.log(this.username)
+            let roomName = roomNameInput.value.trim();
             let password = roomPasswordInput.value;
 
+// Set default if empty
+            if (!roomName) {
+                roomName = `${this.username} Room`;
+            }
+
+// Validation for room name
+            const roomNameMaxLength = 20; // You can change 20 to whatever you want
+            const allowedRoomNamePattern = /^[a-zA-Z0-9 _-]+$/; // Letters, numbers, spaces, underscores, hyphens
+
+            if (roomName.length > roomNameMaxLength) {
+                alert(`Room name must be less than ${roomNameMaxLength} characters.`);
+                return;
+            }
+
+            if (!allowedRoomNamePattern.test(roomName)) {
+                alert('Room name can only contain letters, numbers, spaces, underscores, and dashes.');
+                return;
+            }
+
+// Validation for max players
             if (!maxPlayers || isNaN(maxPlayers) || maxPlayers < 2 || maxPlayers > 4) {
                 alert('Please enter a valid number of players (2-4).');
                 return;
             }
 
+// Validation for private room password
             if (isPrivate && !password) {
                 alert('Please provide a password for a private room.');
                 return;
             }
+
 
             socket.emit('createRoom', {
                 roomName,
@@ -133,7 +154,6 @@ class Lobby extends Phaser.Scene {
                 isPrivate,
                 password: isPrivate ? password : null
             });
-
             socket.once('roomCreated', (roomId, mapSize) => {
                 this.scene.start('room', { roomId, mapSize });
                 this.scene.stop();
