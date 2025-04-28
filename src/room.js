@@ -264,32 +264,50 @@ class Room extends Phaser.Scene {
                 this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.S);
                 this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.D);
                 this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.E);
-                this.input.keyboard.enabled = false
+                this.input.keyboard.enabled = false;
             }
+
             chatInputElement.addEventListener('keypress', function(event) {
-                if(chatInputElement.value.length >= 30) {
+                if (chatInputElement.value.length >= 30) {
                     event.preventDefault();
                 }
             });
+
             if (event.key === 'Enter') {
-                event.preventDefault()
-                const text = chatInputElement.value.trim()
-                if (text === '' || text.length > 30) return
-                const username = this.playerUsername[socket.id]
-                const message = `${username}: ${text}`
-                chatInputElement.value = ''
-                socket.emit('sendMessage', {roomId: this.roomId, message})
+                event.preventDefault();
+                const text = chatInputElement.value.trim();
+
+                const allowedPattern = /^[a-zA-Z0-9\s.,!?]*$/;
+
+                if (text === '') {
+                    alert('Cannot send an empty message.');
+                    return;
+                }
+
+                if (text.length > 30) {
+                    alert('Message is too long. Maximum 30 characters allowed.');
+                    return;
+                }
+
+                if (!allowedPattern.test(text)) {
+                    alert('Message contains invalid characters.');
+                    return;
+                }
+
+                const username = this.playerUsername[socket.id];
+                const message = `${username}: ${text}`;
+                chatInputElement.value = '';
+                socket.emit('sendMessage', { roomId: this.roomId, message });
             } else if (event.key === 'Escape') {
-                this.input.keyboard.enabled = true
+                this.input.keyboard.enabled = true;
                 chatInputElement.value = '';
                 chatInputElement.blur();
             } else if (event.key === ' ') {
-                if(chatInputElement.value.length < 30) {
-                    chatInputElement.value += ' '
+                if (chatInputElement.value.length < 30) {
+                    chatInputElement.value += ' ';
                 }
             }
-
-        })
+        });
 
         this.nextButtonWeapon = this.add.sprite(0, 0, 'nextButton').setScale(0.2)
         this.nextButtonWeapon.setPosition(this.centerX - 50, 1000).setScrollFactor(0).setDepth(1)
