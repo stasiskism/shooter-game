@@ -55,7 +55,19 @@ class Marketplace extends Phaser.Scene {
     this.gun3Object = this.gunObjects.create(1140, 400, 'AR');
     this.gun4Object = this.gunObjects.create(1460, 400, 'Sniper');
 
+    this.skinObjects = this.physics.add.staticGroup();
+    this.skin1Objects = this.skinObjects.create(332, 400, 'skin1_pistol');
+    this.skin2Objects = this.skinObjects.create(685, 400, 'skin1_shotgun');
+    this.skin3Objects = this.skinObjects.create(1040, 400, 'skin1_ar');
+    this.skin4Objects = this.skinObjects.create(1360, 400, 'skin1_sniper');
+
+
+
     this.gunObjects.getChildren().forEach(object => {
+      object.setScale(1.5);
+    });
+
+    this.skinObjects.getChildren().forEach(object => {
       object.setScale(1.5);
     });
 
