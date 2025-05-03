@@ -804,19 +804,24 @@ class Marketplace extends Phaser.Scene {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          this.showCustomPrompt('Skin purchased successfully! The skin has been added to your inventory.');
-          document.getElementById('skin-marketplace-container').style.display = 'none';
-          this.fetchInfo();
-          this.getUnlockedItems();
+          if (this.unlockedSkins.includes(data.skinId)) {
+            this.showCustomPrompt('You already own this skin.');
+          } else {
+            this.showCustomPrompt('Skin purchased successfully! The skin has been added to your inventory.');
+            document.getElementById('skin-marketplace-container').style.display = 'none';
+            this.fetchInfo();
+            this.getUnlockedItems();
+          }
         } else {
           this.showCustomPrompt(`Purchase failed: ${data.error || 'Unknown error'}`);
         }
       })
       .catch(err => {
         console.error('Error purchasing skin:', err);
-        alert('Purchase failed due to server error.');
+        this.showCustomPrompt('Purchase failed due to server error.');
       });
   }
+  
 
   updateSkinListing(listingId, newPrice) {
     fetch('/update-skin-listing', {

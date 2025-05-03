@@ -1159,10 +1159,21 @@ app.get('/get-marketplace-items', async (req, res) => {
       );
       const buyer = buyerResult.rows[0];
   
-      if (!buyer) return res.status(404).json({ error: 'Buyer not found' });
+      if (!buyer) {
+        return res.status(404).json({ error: 'Buyer not found' });
+      }
   
       if (buyer.coins < price) {
         return res.status(400).json({ error: 'Not enough coins' });
+      }
+
+      const alreadyOwnsResult = await client.query(
+        'SELECT 1 FROM user_weapon_skins WHERE user_id = $1 AND skin_id = $2',
+        [buyer.user_id, skin_id]
+      );
+  
+      if (alreadyOwnsResult.rows.length > 0) {
+        return res.status(400).json({ error: 'You already own this skin' });
       }
   
       await client.query('BEGIN');
@@ -1188,7 +1199,10 @@ app.get('/get-marketplace-items', async (req, res) => {
         [buyer.user_id, buyerName, skin_id]
       );
   
-      await client.query('DELETE FROM skin_marketplace_listings WHERE listing_id = $1', [listingId]);
+      await client.query(
+        'DELETE FROM skin_marketplace_listings WHERE listing_id = $1',
+        [listingId]
+      );
   
       await client.query('COMMIT');
       res.json({ success: true });
@@ -1201,6 +1215,7 @@ app.get('/get-marketplace-items', async (req, res) => {
       client.release();
     }
   });
+  
   
 
   app.get('/get-skin-details', async (req, res) => {
