@@ -1001,18 +1001,6 @@ function startGame(multiplayerId) {
         const grenadeId = grenadeIds[id]
         const corner = corners[index]
 
-        console.log('Creating player in startGame():', {
-            id,
-            username,
-            weaponId,
-            skinId: skinIds[id], // ✅ Correct scope
-            grenadeId,
-            bullets,
-            firerate,
-            reload,
-            radius
-        });
-
         backendPlayers[id] = { 
             id,
             multiplayerId,

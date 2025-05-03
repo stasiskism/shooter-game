@@ -380,13 +380,11 @@ class Multiplayer extends Phaser.Scene {
         if (id === socket.id) {
             this.playerAmmo = this.add.text(playerData.x, playerData.y + 750, '', { fontFamily: 'Arial', fontSize: 12, color: '#ffffff' });
             this.weaponDetails = { fire_rate: playerData.firerate, ammo: playerData.bullets, reload: playerData.reload, radius: playerData.radius };
-            console.log("sicia wa: ", this.weaponDetails)
             this.ammoFixed = playerData.bullets
             this.gunAnimation()
         }
 
         this.weapon[id] = this.animationKeys[playerData.weaponId].name;
-        console.log("cia ziureiu kita ", playerData.skinId, playerData.weaponId)
         const skinTextureKey = this.getSkinTextureKey(playerData.skinId, playerData.weaponId);
         this.frontendWeapons[id] = this.physics.add.sprite(playerData.x, playerData.y, skinTextureKey).setScale(2);
 
