@@ -175,13 +175,13 @@ class Spectator extends Phaser.Scene {
                 alivePlayers[id] = true;
             }
 
-            const alivePlayerCount = Object.keys(alivePlayers).length;
-            if (alivePlayerCount === 1) {
-                this.gameStop = true
-                const id = Object.keys(alivePlayers)[0]
-                this.gameWon(backendPlayers[id].username)
-                socket.off('updatePlayers')
-            }
+            // const alivePlayerCount = Object.keys(alivePlayers).length;
+            // if (alivePlayerCount === 1) {
+            //     this.gameStop = true
+            //     const id = Object.keys(alivePlayers)[0]
+            //     this.gameWon(backendPlayers[id].username)
+            //     socket.off('updatePlayers')
+            // }
 
             for (const id in this.frontendPlayers) {
                 if (!alivePlayers[id]) {
@@ -260,7 +260,9 @@ class Spectator extends Phaser.Scene {
 
         this.frontendPlayers[id] = this.physics.add.sprite(playerData.x, playerData.y, 'idleDown').setScale(4);
         this.weapon[id] = this.animationKeys[playerData.weaponId].name;
-        this.frontendWeapons[id] = this.physics.add.sprite(playerData.x, playerData.y, '' + this.weapon[id]).setScale(2);
+        const skinTextureKey = getSkinTextureKey(playerData.skinId);
+        this.frontendWeapons[id] = this.physics.add.sprite(playerData.x, playerData.y, skinTextureKey).setScale(2);
+
 
         const healthBarWidth = 100;
         const healthBarHeight = 10;
@@ -450,6 +452,25 @@ class Spectator extends Phaser.Scene {
             }, 400); //2000
         }
     }
+
+    getSkinTextureKey(skinId, weaponId) {
+        const skinMap = {
+            20: 'skin1_pistol',
+            21: 'skin1_shotgun',
+            22: 'skin1_ar',
+            23: 'skin1_sniper'
+        };
+    
+        const weaponDefaults = {
+            1: 'Pistol',
+            2: 'Shotgun',
+            3: 'AR',
+            4: 'Sniper'
+        };
+    
+        return skinMap[skinId] || weaponDefaults[weaponId];
+    }
+
 }
 
 export default Spectator;

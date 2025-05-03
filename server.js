@@ -53,6 +53,7 @@ const playerUsername = {}
 const activeSessions = {}
 const weaponIds = {}
 const grenadeIds = {}
+const skinIds = {}
 const rooms = {}
 const readyPlayers = {}
 let countdownInterval
@@ -182,46 +183,73 @@ io.on('connection', (socket) => {
     })
 
     socket.on('login', async (data) => {
-        const {username, password} = data
-        let weaponId
+        const { username, password } = data;
+        const client = await sql.connect();
+    
         try {
-            const client = await sql.connect()
-            const result = await client.query(`SELECT user_id, first_login from user_authentication WHERE user_name = $1 and user_password = crypt($2, user_password);`, [username, password])
-            if (result.rows.length === 0 || activeSessions[username]) {
+            const authResult = await client.query(
+                `SELECT user_id, first_login FROM user_authentication WHERE user_name = $1 AND user_password = crypt($2, user_password);`,
+                [username, password]
+            );
+    
+            if (authResult.rows.length === 0) {
                 socket.emit('loginResponse', { success: false, error: 'Wrong username or password.' });
-                await client.query('INSERT INTO error_logs (error_message) VALUES ($1)', ['Wrong username or password.'])
-            } else {
-                const firstLogin = result.rows[0].first_login
-                if (firstLogin) {
-                    weaponResult = await client.query('SELECT weapon from user_profile WHERE user_name = $1', [username])
-                    weaponId = weaponResult.rows[0].weapon
-                    grenadeResult = await client.query('SELECT grenade from user_profile WHERE user_name = $1', [username])
-                    grenadeId = grenadeResult.rows[0].grenade
-                    await client.query('UPDATE user_authentication SET first_login = FALSE WHERE user_name = $1', [username]);
-                    socket.emit('loginResponse', { success: true, firstLogin });
-                }
-                else {
-                weaponResult = await client.query('SELECT weapon from user_profile WHERE user_name = $1', [username])
-                weaponId = weaponResult.rows[0].weapon
-                grenadeResult = await client.query('SELECT grenade from user_profile WHERE user_name = $1', [username])
-                grenadeId = grenadeResult.rows[0].grenade
-
-                socket.emit('loginResponse', { success: true });
-                }
-                playerUsername[socket.id] = username
-                activeSessions[username] = socket.id
-                weaponIds[socket.id] = weaponId
-                grenadeIds[socket.id] = grenadeId
+                await client.query('INSERT INTO error_logs (error_message) VALUES ($1)', ['Invalid credentials']);
+                return;
             }
-            
-            client.release();
+    
+            if (activeSessions[username]) {
+                socket.emit('loginResponse', { success: false, error: 'User already logged in.' });
+                await client.query('INSERT INTO error_logs (error_message) VALUES ($1)', ['Duplicate login attempt']);
+                return;
+            }
+    
+            const userId = authResult.rows[0].user_id;
+            const firstLogin = authResult.rows[0].first_login;
+    
+            const profileResult = await client.query(
+                `SELECT weapon, grenade, selected_skin FROM user_profile WHERE user_name = $1`,
+                [username]
+            );
+    
+            if (profileResult.rows.length === 0) {
+                socket.emit('loginResponse', { success: false, error: 'Profile not found.' });
+                await client.query('INSERT INTO error_logs (error_message) VALUES ($1)', ['Profile lookup failed']);
+                return;
+            }
+    
+            const { weapon, grenade, selected_skin } = profileResult.rows[0];
+    
+            // Store session values
+            playerUsername[socket.id] = username;
+            activeSessions[username] = socket.id;
+            weaponIds[socket.id] = weapon;
+            grenadeIds[socket.id] = grenade;
+            skinIds[socket.id] = selected_skin;
+    
+            if (firstLogin) {
+                await client.query(
+                    'UPDATE user_authentication SET first_login = FALSE WHERE user_name = $1',
+                    [username]
+                );
+                socket.emit('loginResponse', { success: true, firstLogin: true });
+            } else {
+                socket.emit('loginResponse', { success: true });
+            }
+    
         } catch (error) {
-            console.error('Error authenticating user:', error);
-            socket.emit('loginResponse', { success: false, error });
-            await client.query('INSERT INTO error_logs (error_message, error_details) VALUES ($1, $2)', [error.detail, error])
-            
+            console.error('Error during login:', error);
+            socket.emit('loginResponse', { success: false, error: 'Internal error occurred' });
+            await client.query(
+                'INSERT INTO error_logs (error_message, error_details) VALUES ($1, $2)',
+                [error.message, JSON.stringify(error)]
+            );
+        } finally {
+            client.release();
         }
     });
+    
+    
 
     socket.on('resetPassword', async (data) => {
         const {email, code, newPassword} = data
@@ -721,19 +749,38 @@ io.on('connection', (socket) => {
 
 
     socket.on('changeWeapon', async (weaponId) => {
+        const username = playerUsername[socket.id];
+        const client = await sql.connect();
         try {
-            const client = await sql.connect()
-            const username = playerUsername[socket.id]
             if (availableWeapons[socket.id].includes(weaponId)) {
                 await client.query('UPDATE user_profile SET weapon = $1 WHERE user_name = $2;', [weaponId, username]);
-                weaponIds[socket.id] = weaponId
+                weaponIds[socket.id] = weaponId;
+    
+                const result = await client.query(`
+                    SELECT uw.skin_id 
+                    FROM user_weapon_skins uw
+                    JOIN weapon_skins ws ON uw.skin_id = ws.skin_id
+                    WHERE uw.user_name = $1 AND ws.weapon_id = $2
+                    LIMIT 1;
+                `, [username, weaponId]);
+    
+                if (result.rows.length > 0) {
+                    const newSkinId = result.rows[0].skin_id;
+                    skinIds[socket.id] = newSkinId;
+                    await client.query('UPDATE user_profile SET selected_skin = $1 WHERE user_name = $2;', [newSkinId, username]);
+                } else {
+                    skinIds[socket.id] = null;
+                    await client.query('UPDATE user_profile SET selected_skin = NULL WHERE user_name = $1;', [username]);
+                }
             }
-            client.release()
         } catch (error) {
-            console.error('Error updating weaponId:', error);
-            await client.query('INSERT INTO error_logs (error_message, error_details) VALUES ($1, $2)', [error.detail, error])
+            console.error('Error updating weapon or skinId:', error);
+            await client.query('INSERT INTO error_logs (error_message, error_details) VALUES ($1, $2)', [error.message, JSON.stringify(error)]);
+        } finally {
+            client.release();
         }
-    })
+    });
+    
 
     socket.on('changeGrenade', async (grenadeId) => {
         try {
@@ -749,6 +796,7 @@ io.on('connection', (socket) => {
             await client.query('INSERT INTO error_logs (error_message, error_details) VALUES ($1, $2)', [error.detail, error])
         }
     })
+
 
     socket.on('explode', async (data) => {
         const playerId = data.playerId
@@ -882,9 +930,24 @@ function calculateReadyPlayers(readyPlayers) {
 
 function filterPlayersByMultiplayerId(multiplayerId) {
     let playersInSession = {}
+
     for (const playerId in backendPlayers) {
         if (backendPlayers[playerId].multiplayerId === multiplayerId) {
-            playersInSession[playerId] = backendPlayers[playerId]
+            const player = backendPlayers[playerId];
+            playersInSession[playerId] = {
+                id: player.id,
+                x: player.x,
+                y: player.y,
+                username: player.username,
+                weaponId: player.weaponId,
+                skinId: player.skinId,
+                bullets: player.bullets,
+                health: player.health,
+                firerate: weaponDetails[playerId].fire_rate,
+                reload: weaponDetails[playerId].reload,
+                radius: weaponDetails[playerId].radius,
+                multiplayerId: player.multiplayerId
+              };
         }
     }
     return playersInSession
@@ -938,6 +1001,18 @@ function startGame(multiplayerId) {
         const grenadeId = grenadeIds[id]
         const corner = corners[index]
 
+        console.log('Creating player in startGame():', {
+            id,
+            username,
+            weaponId,
+            skinId: skinIds[id], // ✅ Correct scope
+            grenadeId,
+            bullets,
+            firerate,
+            reload,
+            radius
+        });
+
         backendPlayers[id] = { 
             id,
             multiplayerId,
@@ -952,8 +1027,11 @@ function startGame(multiplayerId) {
             radius,
             grenades: 1,
             grenadeId,
-            weaponId
+            weaponId,
+            skinId: skinIds[id] || null
         };
+
+        console.log('backendPlayers:', filterPlayersByMultiplayerId(multiplayerId));
     });
 }
 }

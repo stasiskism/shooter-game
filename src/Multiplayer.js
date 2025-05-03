@@ -239,6 +239,7 @@ class Multiplayer extends Phaser.Scene {
         });
 
         socket.on('updatePlayers', backendPlayers => {
+            
             const alivePlayers = {};
             for (const id in backendPlayers) {
                 const backendPlayer = backendPlayers[id];
@@ -379,12 +380,16 @@ class Multiplayer extends Phaser.Scene {
         if (id === socket.id) {
             this.playerAmmo = this.add.text(playerData.x, playerData.y + 750, '', { fontFamily: 'Arial', fontSize: 12, color: '#ffffff' });
             this.weaponDetails = { fire_rate: playerData.firerate, ammo: playerData.bullets, reload: playerData.reload, radius: playerData.radius };
+            console.log("sicia wa: ", this.weaponDetails)
             this.ammoFixed = playerData.bullets
             this.gunAnimation()
         }
 
         this.weapon[id] = this.animationKeys[playerData.weaponId].name;
-        this.frontendWeapons[id] = this.physics.add.sprite(playerData.x, playerData.y, '' + this.weapon[id]).setScale(2);
+        console.log("cia ziureiu kita ", playerData.skinId, playerData.weaponId)
+        const skinTextureKey = this.getSkinTextureKey(playerData.skinId, playerData.weaponId);
+        this.frontendWeapons[id] = this.physics.add.sprite(playerData.x, playerData.y, skinTextureKey).setScale(2);
+
     }
 
     updatePlayerPosition(id, backendPlayer) {
@@ -488,7 +493,6 @@ class Multiplayer extends Phaser.Scene {
     }
 
     removeFallingObject(object) {
-        console.log('asd')
         socket.emit('removeFallingOject', object)
         object.destroy();
         this.fallingObjects = this.fallingObjects.filter(obj => obj !== object);
@@ -799,6 +803,24 @@ class Multiplayer extends Phaser.Scene {
                 }
             });
         }
+    }
+
+    getSkinTextureKey(skinId, weaponId) {
+        const skinMap = {
+            20: 'skin1_pistol',
+            21: 'skin1_shotgun',
+            22: 'skin1_ar',
+            23: 'skin1_sniper'
+        };
+    
+        const weaponDefaults = {
+            1: 'Pistol',
+            2: 'Shotgun',
+            3: 'AR',
+            4: 'Sniper'
+        };
+    
+        return skinMap[skinId] || weaponDefaults[weaponId];
     }
 
 }

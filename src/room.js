@@ -329,24 +329,6 @@ class Room extends Phaser.Scene {
 
         this.add.text(this.centerX - 930, 980, 'Choose skin:', { fontFamily: 'Arial', fontSize: 48, color: '#ffffff' });
 
-        this.previousButtonSkin = this.add.sprite(0, 0, 'previousButton').setScale(0.2)
-        this.previousButtonSkin.setPosition(this.centerX - 510, 980).setScrollFactor(0).setDepth(1)
-        this.previousButtonSkin.setInteractive({useHandCursor: true})
-        this.previousButtonSkin.on('pointerdown', () => {
-            if (!this.availableSkins?.[this.weaponId]?.length) return;
-            this.currentSkinIndex = (this.currentSkinIndex - 1 + this.availableSkins[this.weaponId].length) % this.availableSkins[this.weaponId].length;
-            this.updateSkinDisplay();
-          });
-
-        this.nextButtonSkin = this.add.sprite(0, 0, 'nextButton').setScale(0.2)
-        this.nextButtonSkin.setPosition(this.centerX - 50, 980).setScrollFactor(0).setDepth(1)
-        this.nextButtonSkin.setInteractive({useHandCursor: true})
-        this.nextButtonSkin.on('pointerdown', () => {
-            if (!this.availableSkins?.[this.weaponId]?.length) return;
-            this.currentSkinIndex = (this.currentSkinIndex + 1) % this.availableSkins[this.weaponId].length;
-            this.updateSkinDisplay();
-          });
-
         this.previousButtonWeapon = this.add.sprite(0, 0, 'previousButton').setScale(0.2)
         this.previousButtonWeapon.setPosition(this.centerX - 510, 880).setScrollFactor(0).setDepth(1)
         this.previousButtonWeapon.setInteractive({useHandCursor: true})
@@ -381,6 +363,35 @@ class Room extends Phaser.Scene {
             }
             this.setupGrenade(this.grenadeId)
             socket.emit('changeGrenade', this.grenadeId)
+        });
+
+        this.previousButtonSkin = this.add.sprite(0, 0, 'previousButton').setScale(0.2)
+        this.previousButtonSkin.setPosition(this.centerX - 510, 980).setScrollFactor(0).setDepth(1)
+        this.previousButtonSkin.setInteractive({useHandCursor: true})
+        this.previousButtonSkin.on('pointerdown', () => {
+            const skinsForWeapon = this.availableSkins?.[this.weaponId];
+            if (!skinsForWeapon?.length) return;
+        
+            this.currentSkinIndex = (this.currentSkinIndex - 1 + skinsForWeapon.length) % skinsForWeapon.length;
+            const selectedSkinId = skinsForWeapon[this.currentSkinIndex];
+        
+            this.updateSkinDisplay();
+            socket.emit('changeSkin', selectedSkinId);
+        });
+        
+
+        this.nextButtonSkin = this.add.sprite(0, 0, 'nextButton').setScale(0.2)
+        this.nextButtonSkin.setPosition(this.centerX - 50, 980).setScrollFactor(0).setDepth(1)
+        this.nextButtonSkin.setInteractive({useHandCursor: true})
+        this.nextButtonSkin.on('pointerdown', () => {
+            const skinsForWeapon = this.availableSkins?.[this.weaponId];
+            if (!skinsForWeapon?.length) return;
+        
+            this.currentSkinIndex = (this.currentSkinIndex + 1) % skinsForWeapon.length;
+            const selectedSkinId = skinsForWeapon[this.currentSkinIndex];
+        
+            this.updateSkinDisplay();
+            socket.emit('changeSkin', selectedSkinId);
         });
 
     }
@@ -537,7 +548,7 @@ class Room extends Phaser.Scene {
         for (const playerId in this.readyPlayers) {
            count++
         }
-        if (count === this.readyPlayersCount && count > 1) {
+        if (count === this.readyPlayersCount && count > 0) { // > 1
             this.readyButton.destroy()
             console.log('VISI PLAYERIAI READY')
             this.countdownText = this.add.text(800, 200, '', { fontSize: '64px', fill: '#fff' });
