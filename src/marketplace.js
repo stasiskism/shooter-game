@@ -13,6 +13,7 @@ class Marketplace extends Phaser.Scene {
     this.isInteracting = false;
     this.unlockedWeapons = [];
     this.unlockedGrenades = [];
+    this.unlockedSkins = [];
   }
 
   init(data) {
@@ -20,12 +21,13 @@ class Marketplace extends Phaser.Scene {
   }
 
   preload() {
-    // Add your preload logic here if needed
+
   }
 
   create() {
     this.fetchInfo();
-    this.getUnlockedWeapons();
+    this.getUnlockedItems();
+    this.fetchMarketplaceItems();
     this.setupScene();
     this.setupInputEvents();
     this.setupProgressBar();
@@ -56,10 +58,12 @@ class Marketplace extends Phaser.Scene {
     this.gun4Object = this.gunObjects.create(1460, 400, 'Sniper');
 
     this.skinObjects = this.physics.add.staticGroup();
-    this.skin1Objects = this.skinObjects.create(332, 400, 'skin1_pistol');
-    this.skin2Objects = this.skinObjects.create(685, 400, 'skin1_shotgun');
-    this.skin3Objects = this.skinObjects.create(1040, 400, 'skin1_ar');
-    this.skin4Objects = this.skinObjects.create(1360, 400, 'skin1_sniper');
+    this.skin1Objects = this.skinObjects.create(332, 250, 'skin1_pistol');
+    this.skin2Objects = this.skinObjects.create(685, 250, 'skin1_shotgun');
+    this.skin3Objects = this.skinObjects.create(1040, 250, 'skin1_ar');
+    this.skin4Objects = this.skinObjects.create(1360, 250, 'skin1_sniper');
+    
+    
 
 
 
@@ -88,6 +92,8 @@ class Marketplace extends Phaser.Scene {
 
     this.physics.add.overlap(this.player, this.gunObjects, this.interactWithObject, null, this);
     this.physics.add.overlap(this.player, this.grenadeObjects, this.interactWithObject, null, this);
+    this.physics.add.overlap(this.player, this.skinObjects, this.interactWithObject, null, this);
+
 
     this.coinsText = this.add.text(960, 30, 'Coins: ', { fontFamily: 'Arial', fontSize: 24, color: '#ffffff' });
     this.plusButton = this.add.sprite(1120, 40, 'plus').setScale(0.05).setInteractive({ useHandCursor: true });
@@ -290,14 +296,17 @@ class Marketplace extends Phaser.Scene {
     this.eKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
     socket.on('purchaseConfirmed', (data) => {
-      const { weaponId, grenadeId } = data;
+      const { weaponId, grenadeId, skinId } = data;
       if (weaponId) {
         this.unlockedWeapons.push(weaponId);
       } else if (grenadeId) {
         this.unlockedGrenades.push(grenadeId);
+      } else if (skinId) {
+        this.unlockedSkins.push(skinId);
       }
       this.showSuccessMessage();
     });
+    
   }
 
   update() {
@@ -355,61 +364,40 @@ class Marketplace extends Phaser.Scene {
 
   interactWithObject(player, object) {
     const distance = Phaser.Math.Distance.Between(player.x, player.y, object.x, object.y);
-    if (distance < 50 && !this.interactionCooldown) {
-      let requiredLevel = 0;
-      let itemName = '';
-      let cost = 0;
-      let weaponId = 0;
-      let grenadeId = 0;
-
-      if (object.texture.key === 'Pistol') {
-        weaponId = 1;
-        requiredLevel = 1;
-        itemName = 'Pistol';
-        cost = 1000;
-      } else if (object.texture.key === 'Shotgun') {
-        weaponId = 2;
-        requiredLevel = 2;
-        itemName = 'Shotgun';
-        cost = 2000;
-      } else if (object.texture.key === 'AR') {
-        weaponId = 3;
-        requiredLevel = 3;
-        itemName = 'AR';
-        cost = 3000;
-      } else if (object.texture.key === 'Sniper') {
-        weaponId = 4;
-        requiredLevel = 4;
-        itemName = 'Sniper';
-        cost = 4000;
-      } else if (object.texture.key === 'smokeGrenade') {
-        grenadeId = 5;
-        requiredLevel = 1;
-        itemName = 'Smoke Grenade';
-        cost = 2500;
-      } else if (object.texture.key === 'grenade') {
-        grenadeId = 6;
-        requiredLevel = 3;
-        itemName = 'Explosive Grenade';
-        cost = 4000;
-      }
-
-      this.currentObject = { weaponId, grenadeId, itemName, requiredLevel, cost };
+  
+    if (distance < 50 && !this.interactionCooldown && this.marketplaceItems) {
+      const textureKey = object.texture.key;
+  
+      const item = this.marketplaceItems.find(item => item.texture_key === textureKey);
+      if (!item) return;
+  
+      const { item_id, item_type, name, cost, required_level } = item;
+  
+      const alreadyUnlocked =
+        (item_type === 'weapon' && this.unlockedWeapons.includes(item_id)) ||
+        (item_type === 'grenade' && this.unlockedGrenades.includes(item_id)) ||
+        (item_type === 'skin' && this.unlockedSkins?.includes(item_id));
+  
+      this.currentObject = {
+        weaponId: item_type === 'weapon' ? item_id : 0,
+        grenadeId: item_type === 'grenade' ? item_id : 0,
+        skinId: item_type === 'skin' ? item_id : 0,
+        itemName: name,
+        requiredLevel: required_level,
+        cost
+      };
+  
       this.isInteracting = true;
-
-      if (weaponId > 0 && this.unlockedWeapons.includes(weaponId)) {
-        this.popupText.setText(`${itemName} is already unlocked.`);
-      } else if (grenadeId > 0 && this.unlockedGrenades.includes(grenadeId)) {
-        this.popupText.setText(`${itemName} is already unlocked.`);
-      } else if (this.level >= requiredLevel) {
-        this.popupText.setText(`Unlock ${itemName} for ${cost} coins? Press E to buy.`);
-        if (this.eKey.isDown) {
-          this.showPurchasePrompt();
-        }
+  
+      if (alreadyUnlocked) {
+        this.popupText.setText(`${name} is already unlocked.`);
+      } else if (this.level >= required_level) {
+        this.popupText.setText(`Unlock ${name} for ${cost} coins. Press E to buy.`);
+        if (this.eKey.isDown) this.showPurchasePrompt();
       } else {
-        this.popupText.setText(`Level ${requiredLevel} required to unlock ${itemName}.`);
+        this.popupText.setText(`Level ${required_level} required to unlock ${name}.`);
       }
-
+  
       this.popupText.setPosition(player.x - 50, player.y - 50);
       this.popupText.setVisible(true);
     } else {
@@ -418,6 +406,9 @@ class Marketplace extends Phaser.Scene {
       this.isInteracting = false;
     }
   }
+  
+  
+  
 
   showPurchasePrompt() {
     const promptContainer = document.getElementById('weapon-purchase-container');
@@ -466,7 +457,9 @@ class Marketplace extends Phaser.Scene {
 
   buyItem() {
     if (!this.isInteracting) return;
-    const { weaponId, grenadeId, itemName, requiredLevel, cost } = this.currentObject;
+    const { weaponId, grenadeId, skinId, itemName, requiredLevel, cost } = this.currentObject;
+
+
 
     if (weaponId && this.unlockedWeapons.includes(weaponId)) {
       this.popupText.setText(`${itemName} is already unlocked.`);
@@ -496,7 +489,9 @@ class Marketplace extends Phaser.Scene {
         socket.emit('buyGun', { socket: socket.id, weaponId });
       } else if (grenadeId) {
         socket.emit('buyGrenade', { socket: socket.id, grenadeId });
-      }
+      } else if (skinId) {
+        socket.emit('buySkin', { socket: socket.id, skinId });
+      }      
       this.showSuccessMessage();
     } else {
       this.purchaseText.setText(`Not enough coins to buy ${itemName}.`);
@@ -580,15 +575,27 @@ class Marketplace extends Phaser.Scene {
       .catch(error => console.error('Error fetching info:', error));
   }
 
-  getUnlockedWeapons() {
+  getUnlockedItems() {
     fetch(`/get-weapons?username=${encodeURIComponent(this.username)}`)
-      .then(response => response.json())
-      .then(data => {
-        this.unlockedWeapons = data.weapons;
-        this.unlockedGrenades = data.grenades;
-      })
-      .catch(error => console.error('Error fetching available weapons:', error));
+    .then(response => response.json())
+    .then(data => {
+      this.unlockedWeapons = data.weapons || [];
+      this.unlockedGrenades = data.grenades || [];
+      this.unlockedSkins = data.skins || [];
+    })
+    .catch(error => console.error('Error fetching unlocked items:', error));
   }
+  
+
+  fetchMarketplaceItems() {
+    fetch('/get-marketplace-items')
+      .then(res => res.json())
+      .then(data => {
+        this.marketplaceItems = data;
+      })
+      .catch(err => console.error('Failed to load marketplace items:', err));
+  }
+  
 }
 
 export default Marketplace;

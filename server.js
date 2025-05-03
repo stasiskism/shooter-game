@@ -761,7 +761,10 @@ io.on('connection', (socket) => {
             const username = playerUsername[socket];
             const client = await sql.connect();
             const result = await client.query('SELECT user_id FROM user_profile WHERE user_name = $1', [username]);
-            const costResult = await client.query('SELECT cost FROM marketplace WHERE item_id = $1', [weaponId])
+            const costResult = await client.query(
+                'SELECT cost FROM marketplace WHERE item_type = $1 AND item_id = $2',
+                ['weapon', weaponId]
+              );
             const userId = result.rows[0].user_id;
             const cost = costResult.rows[0].cost;
             console.log('id', userId, weaponId, cost, username);
@@ -798,6 +801,52 @@ io.on('connection', (socket) => {
             client.release();
         }
     });
+
+
+    socket.on('buySkin', async (data) => {
+        try {
+          const { socket: socketId, skinId } = data;
+          const username = playerUsername[socketId];
+          const client = await sql.connect();
+      
+          const result = await client.query(
+            'SELECT user_id FROM user_profile WHERE user_name = $1',
+            [username]
+          );
+      
+          const userId = result.rows[0].user_id;
+      
+          const costResult = await client.query(
+            'SELECT cost, item_type FROM marketplace WHERE item_type = $1 AND item_id = $2',
+            ['skin', skinId]
+          );
+      
+          const cost = costResult.rows[0].cost;
+          const itemType = costResult.rows[0].item_type;
+      
+          // Deduct coins
+          await client.query(
+            'UPDATE user_profile SET coins = coins - $1 WHERE user_name = $2',
+            [cost, username]
+          );
+      
+          // Insert skin ownership with required fields
+          await client.query(
+            'INSERT INTO user_weapon_skins (user_id, user_name, item_type, skin_id) VALUES ($1, $2, $3, $4)',
+            [userId, username, itemType, skinId]
+          );
+      
+          io.to(socketId).emit('purchaseConfirmed', { skinId });
+      
+          client.release();
+        } catch (error) {
+          const client = await sql.connect();
+          console.error('Error buying skin:', error);
+          await client.query('INSERT INTO error_logs (error_message) VALUES ($1)', [error.message]);
+          client.release();
+        }
+      });
+      
 
 
     
@@ -925,22 +974,41 @@ app.get('/get-info', async (req, res) => {
 
 app.get('/get-weapons', async (req, res) => {
     try {
-        const username = req.query.username
-        const client = await sql.connect()
-        const resultWeapons = await client.query('SELECT weapon_id FROM user_weapons WHERE user_name = $1', [username])
-        const resultGrenades = await client.query('SELECT grenade_id FROM user_grenades WHERE user_name = $1', [username])
-        client.release();
-        const userWeapons = resultWeapons.rows.map(row => row.weapon_id);
-        const userGrenades = resultGrenades.rows.map(row => row.grenade_id);
-        res.json({weapons: userWeapons, grenades: userGrenades})
+      const username = req.query.username;
+      const client = await sql.connect();
+  
+      const resultWeapons = await client.query('SELECT weapon_id FROM user_weapons WHERE user_name = $1', [username]);
+      const resultGrenades = await client.query('SELECT grenade_id FROM user_grenades WHERE user_name = $1', [username]);
+      const resultSkins = await client.query('SELECT skin_id FROM user_weapon_skins WHERE user_name = $1', [username]);
+  
+      const userWeapons = resultWeapons.rows.map(row => row.weapon_id);
+      const userGrenades = resultGrenades.rows.map(row => row.grenade_id);
+      const userSkins = resultSkins.rows.map(row => row.skin_id);
+  
+      res.json({ weapons: userWeapons, grenades: userGrenades, skins: userSkins });
+  
+      client.release();
     } catch (error) {
-        const client = await sql.connect()
-        console.error('Error fetching weapons:', error)
-        await client.query('INSERT INTO error_logs (error_message) VALUES ($1)', [error])
-        res.status(500).json({ error: 'Failed to fetch weapons' });
-        client.release()
+      console.error('Error fetching items:', error);
+      res.status(500).json({ error: 'Failed to fetch user items' });
     }
-})
+  });
+  
+
+app.get('/get-marketplace-items', async (req, res) => {
+    try {
+      const client = await sql.connect();
+      const result = await client.query(
+        'SELECT item_id, item_type, name, cost, required_level, texture_key FROM marketplace'
+      );      
+      client.release();
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error fetching marketplace items:', error);
+      res.status(500).json({ error: 'Failed to load items.' });
+    }
+  });
+  
 
 setInterval(async () => {
     for (const id in backendProjectiles) {
