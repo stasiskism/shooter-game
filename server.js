@@ -335,13 +335,30 @@ io.on('connection', (socket) => {
                 const client = await sql.connect()
                 const resultGrenades = await client.query('SELECT grenade_id FROM user_grenades WHERE user_name = $1', [username])
                 const resultWeapons = await client.query('SELECT weapon_id FROM user_weapons WHERE user_name = $1', [username])
+                const resultSkins = await client.query('SELECT uw.skin_id, ws.weapon_id FROM user_weapon_skins uw JOIN weapon_skins ws ON uw.skin_id = ws.skin_id WHERE uw.user_name = $1', [username]);
                 for (const row of resultGrenades.rows) {
                     availableGrenades[socket.id].push(row.grenade_id)
                 }
                 for (const row of resultWeapons.rows) {
                     availableWeapons[socket.id].push(row.weapon_id)
                 }
-                io.to(socket.id).emit('availableWeapons', availableWeapons[socket.id], availableGrenades[socket.id])
+                /* Group unlocked skin_ids by their associated weapon_id so we can access skins per weapon from this
+                [
+                    { weapon_id: 2, skin_id: 5 },
+                    { weapon_id: 2, skin_id: 6 },
+                    { weapon_id: 3, skin_id: 7 },
+                ] to this 
+                    {
+                        2: [5, 6],
+                        3: [7]
+                    }
+                    */
+                const availableSkins = resultSkins.rows.reduce((acc, row) => {
+                    if (!acc[row.weapon_id]) acc[row.weapon_id] = [];
+                    acc[row.weapon_id].push(row.skin_id);
+                    return acc;
+                  }, {});
+                  io.to(socket.id).emit('availableWeapons', availableWeapons[socket.id], availableGrenades[socket.id], availableSkins);
             } catch (error) {
                 const client = await sql.connect()
                 console.error('Error getting available weapons and grenades:', error);

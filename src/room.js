@@ -144,10 +144,14 @@ class Room extends Phaser.Scene {
             this.chatDisplay.setText(this.chatHistory.slice(-15).join('\n'));
         })
 
-        socket.on('availableWeapons', (availableWeapons, availableGrenades) => {
-            this.availableWeapons = availableWeapons
-            this.availableGrenades = availableGrenades
-        })
+        socket.on('availableWeapons', (availableWeapons, availableGrenades, availableSkins) => {
+            this.availableWeapons = availableWeapons;
+            this.availableGrenades = availableGrenades;
+            this.availableSkins = availableSkins;
+            this.currentSkinIndex = 0;
+            this.updateSkinDisplay();
+          });
+          
 
     }
 
@@ -328,10 +332,20 @@ class Room extends Phaser.Scene {
         this.previousButtonSkin = this.add.sprite(0, 0, 'previousButton').setScale(0.2)
         this.previousButtonSkin.setPosition(this.centerX - 510, 980).setScrollFactor(0).setDepth(1)
         this.previousButtonSkin.setInteractive({useHandCursor: true})
+        this.previousButtonSkin.on('pointerdown', () => {
+            if (!this.availableSkins?.[this.weaponId]?.length) return;
+            this.currentSkinIndex = (this.currentSkinIndex - 1 + this.availableSkins[this.weaponId].length) % this.availableSkins[this.weaponId].length;
+            this.updateSkinDisplay();
+          });
 
         this.nextButtonSkin = this.add.sprite(0, 0, 'nextButton').setScale(0.2)
         this.nextButtonSkin.setPosition(this.centerX - 50, 980).setScrollFactor(0).setDepth(1)
         this.nextButtonSkin.setInteractive({useHandCursor: true})
+        this.nextButtonSkin.on('pointerdown', () => {
+            if (!this.availableSkins?.[this.weaponId]?.length) return;
+            this.currentSkinIndex = (this.currentSkinIndex + 1) % this.availableSkins[this.weaponId].length;
+            this.updateSkinDisplay();
+          });
 
         this.previousButtonWeapon = this.add.sprite(0, 0, 'previousButton').setScale(0.2)
         this.previousButtonWeapon.setPosition(this.centerX - 510, 880).setScrollFactor(0).setDepth(1)
@@ -414,6 +428,9 @@ class Room extends Phaser.Scene {
             });
             this.lockedWeaponText.setScrollFactor(0).setDepth(1);
         }
+        this.currentSkinIndex = 0;
+        this.updateSkinDisplay();
+
     }
 
     setupGrenade(grenadeId) {
@@ -529,6 +546,37 @@ class Room extends Phaser.Scene {
             socket.emit('startCountdown', this.roomId)
         }
     }
+
+    updateSkinDisplay() {
+        if (this.displaySkin) {
+          this.displaySkin.destroy();
+        }
+      
+        const skins = this.availableSkins?.[this.weaponId] || [];
+        if (!skins.length) {
+          this.displaySkin = this.add.text(this.centerX - 270, 980, 'No skins available', {
+            fontFamily: 'Arial',
+            fontSize: 24,
+            color: '#ffffff'
+          });
+          return;
+        }
+      
+        const currentSkinId = skins[this.currentSkinIndex % skins.length];
+        const textureKey = this.getSkinTextureKey(currentSkinId); // You may need to map this
+      
+        this.displaySkin = this.add.sprite(this.centerX - 270, 980, textureKey).setScale(2);
+      }
+
+      getSkinTextureKey(skinId) {
+        const textureMap = {
+          20: 'skin1_pistol',
+          21: 'skin1_shotgun',
+          22: 'skin1_ar',
+          23: 'skin1_sniper'
+        };
+        return textureMap[skinId] || 'default_skin';
+      }
 
 }
 
