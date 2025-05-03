@@ -697,12 +697,12 @@ class Marketplace extends Phaser.Scene {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          alert(`Listed skin for ${price} coins!`);
+          this.showCustomPrompt(`Listed skin for ${price} coins!`);
           this.fetchSkinListings(1, true);
           this.getUnlockedItems();
           this.populateOwnedSkins();
         } else {
-          alert(`Listing failed: ${data.error || 'Unknown error.'}`);
+          this.showCustomPrompt(`Listing failed: ${data.error || 'Unknown error.'}`);
         }
       })
       .catch(err => {
@@ -804,12 +804,12 @@ class Marketplace extends Phaser.Scene {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          alert('Skin purchased successfully! The skin has been added to your inventory.');
+          this.showCustomPrompt('Skin purchased successfully! The skin has been added to your inventory.');
           document.getElementById('skin-marketplace-container').style.display = 'none';
           this.fetchInfo();
           this.getUnlockedItems();
         } else {
-          alert(`Purchase failed: ${data.error || 'Unknown error'}`);
+          this.showCustomPrompt(`Purchase failed: ${data.error || 'Unknown error'}`);
         }
       })
       .catch(err => {
@@ -827,11 +827,11 @@ class Marketplace extends Phaser.Scene {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          alert('Listing updated.');
+          this.showCustomPrompt('Listing updated.');
           this.fetchSkinListings(1, true);
           this.populateOwnedSkins();
         } else {
-          alert(`Update failed: ${data.error}`);
+          this.showCustomPrompt(`Update failed: ${data.error}`);
         }
       })
       .catch(err => {
@@ -850,16 +850,41 @@ class Marketplace extends Phaser.Scene {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          alert('Listing removed.');
+          this.showCustomPrompt('Listing removed.');
           this.fetchSkinListings(1, true);
           this.getUnlockedItems();
           this.populateOwnedSkins();
         } else {
-          alert(`Cancel failed: ${data.error}`);
+          this.showCustomPrompt(`Cancel failed: ${data.error}`);
         }
       })
       .catch(err => console.error('Error canceling listing:', err));
   }
+
+  showCustomPrompt(message, closeCallback) {
+    const successContainer = document.getElementById('purchase-success-container');
+    const successMessage = document.getElementById('purchase-success-message');
+  
+    successMessage.innerHTML = `
+      <div class="prompt-message">${message}</div>
+      <div class="prompt-button" id="successCloseButton">Close</div>
+    `;
+  
+    successContainer.style.display = 'block';
+  
+    const closeButton = document.getElementById('successCloseButton');
+  
+    const handler = () => {
+      successContainer.style.display = 'none';
+      closeButton.removeEventListener('click', handler);
+      if (typeof closeCallback === 'function') {
+        closeCallback();
+      }
+    };
+  
+    closeButton.addEventListener('click', handler);
+  }
+  
   
 }
 
