@@ -33,6 +33,9 @@ class Marketplace extends Phaser.Scene {
     this.setupProgressBar();
     this.setupPaymentListener();
     this.settingsButton = new SettingsButtonWithPanel(this, 1890, 90);
+    this.bKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.B);
+    this.setupSkinMarketplaceUI();
+
   }
 
   setupScene() {
@@ -457,49 +460,38 @@ class Marketplace extends Phaser.Scene {
 
   buyItem() {
     if (!this.isInteracting) return;
+  
     const { weaponId, grenadeId, skinId, itemName, requiredLevel, cost } = this.currentObject;
-
-
-
-    if (weaponId && this.unlockedWeapons.includes(weaponId)) {
-      this.popupText.setText(`${itemName} is already unlocked.`);
-      this.popupText.setVisible(true);
-      this.time.addEvent({ delay: 2000, callback: () => this.popupText.setVisible(false) });
-      return;
-    }
-
-    if (grenadeId && this.unlockedGrenades.includes(grenadeId)) {
-      this.popupText.setText(`${itemName} is already unlocked.`);
-      this.popupText.setVisible(true);
-      this.time.addEvent({ delay: 2000, callback: () => this.popupText.setVisible(false) });
-      return;
-    }
-
-    if (this.level < requiredLevel) {
-      this.popupText.setText(`Level ${requiredLevel} required to unlock ${itemName}.`);
-      this.popupText.setVisible(true);
-      this.time.addEvent({ delay: 2000, callback: () => this.popupText.setVisible(false) });
-      return;
-    }
-
+  
     if (this.coins >= cost) {
       this.coins -= cost;
       this.coinsText.setText(`Coins: ${this.coins}`);
+  
       if (weaponId) {
         socket.emit('buyGun', { socket: socket.id, weaponId });
       } else if (grenadeId) {
         socket.emit('buyGrenade', { socket: socket.id, grenadeId });
       } else if (skinId) {
         socket.emit('buySkin', { socket: socket.id, skinId });
-      }      
+  
+        const container = document.getElementById('skin-marketplace-container');
+        if (container && container.style.display !== 'none') {
+          setTimeout(() => {
+            this.fetchSkinListings(1, true);
+            this.getUnlockedItems();
+          }, 300);
+        }
+      }
+  
       this.showSuccessMessage();
+  
     } else {
       this.purchaseText.setText(`Not enough coins to buy ${itemName}.`);
       this.purchaseText.setStyle({ fontSize: '64px', fill: '#ff0000', align: 'center' });
       this.purchaseText.setVisible(true);
       this.time.addEvent({ delay: 2000, callback: () => this.purchaseText.setVisible(false) });
     }
-
+  
     this.currentObject = null;
     this.isInteracting = false;
   }
@@ -577,13 +569,13 @@ class Marketplace extends Phaser.Scene {
 
   getUnlockedItems() {
     fetch(`/get-weapons?username=${encodeURIComponent(this.username)}`)
-    .then(response => response.json())
-    .then(data => {
-      this.unlockedWeapons = data.weapons || [];
-      this.unlockedGrenades = data.grenades || [];
-      this.unlockedSkins = data.skins || [];
-    })
-    .catch(error => console.error('Error fetching unlocked items:', error));
+      .then(response => response.json())
+      .then(data => {
+        this.unlockedWeapons = data.weapons || [];
+        this.unlockedGrenades = data.grenades || [];
+        this.unlockedSkins = data.skins || [];
+      })
+      .catch(error => console.error('Error fetching unlocked items:', error));
   }
   
 
@@ -594,6 +586,279 @@ class Marketplace extends Phaser.Scene {
         this.marketplaceItems = data;
       })
       .catch(err => console.error('Failed to load marketplace items:', err));
+  }
+
+  setupSkinMarketplaceUI() {
+    const skinMarketplaceContainer = document.getElementById('skin-marketplace-container');
+    const closeBtn = document.getElementById('close-skin-marketplace');
+    const listButton = document.getElementById('list-skin-button');
+    const listingsDiv = document.getElementById('skin-listings');
+  
+    this.currentPage = 1;
+    this.skinMarketplaceVisible = false;
+  
+    closeBtn.addEventListener('click', () => {
+      skinMarketplaceContainer.style.display = 'none';
+      this.skinMarketplaceVisible = false;
+      skinMarketplaceContainer.removeEventListener('scroll', this.scrollHandler);
+    });
+  
+    if (listButton && !listButton.dataset.listenerAdded) {
+      listButton.addEventListener('click', () => {
+        const skinId = parseInt(document.getElementById('owned-skins').value);
+        const price = parseInt(document.getElementById('listing-price').value);
+        this.listSkinForSale(skinId, price);
+      });
+      listButton.dataset.listenerAdded = 'true';
+    }
+  
+    this.input.keyboard.on('keydown-B', () => {
+      if (this.skinMarketplaceVisible) {
+        skinMarketplaceContainer.style.display = 'none';
+        this.skinMarketplaceVisible = false;
+        skinMarketplaceContainer.removeEventListener('scroll', this.scrollHandler);
+      } else {
+        this.currentPage = 1;
+        this.fetchSkinListings(this.currentPage, true);
+        this.populateOwnedSkins();
+        skinMarketplaceContainer.style.display = 'block';
+        this.skinMarketplaceVisible = true;
+  
+        this.scrollHandler = () => {
+          const scrollBottom = skinMarketplaceContainer.scrollTop + skinMarketplaceContainer.clientHeight;
+          const scrollHeight = skinMarketplaceContainer.scrollHeight;
+  
+          if (scrollBottom >= scrollHeight - 50) {
+            this.currentPage++;
+            this.fetchSkinListings(this.currentPage, false);
+          }
+        };
+  
+        skinMarketplaceContainer.addEventListener('scroll', this.scrollHandler);
+      }
+    });
+  }
+  
+  
+
+  populateOwnedSkins() {
+    const skinSelect = document.getElementById('owned-skins');
+    skinSelect.innerHTML = '';
+  
+    fetch('/get-all-skin-listings')
+      .then(res => res.json())
+      .then(listings => {
+        const listedSkinIds = listings
+          .filter(listing => listing.seller_name === this.username)
+          .map(listing => listing.skin_id);
+  
+        return fetch(`/get-weapons?username=${encodeURIComponent(this.username)}`)
+          .then(res => res.json())
+          .then(data => {
+            const ownedSkins = data.skins || [];
+            const unlistedSkins = ownedSkins.filter(skinId => !listedSkinIds.includes(skinId));
+  
+            if (unlistedSkins.length === 0) {
+              const option = document.createElement('option');
+              option.disabled = true;
+              option.textContent = 'No skins available';
+              skinSelect.appendChild(option);
+              return;
+            }
+  
+            unlistedSkins.forEach(skinId => {
+              fetch(`/get-skin-details?skinId=${skinId}`)
+                .then(res => res.json())
+                .then(skin => {
+                  const option = document.createElement('option');
+                  option.value = skinId;
+                  option.textContent = `${skin.skin_name} (${skin.rarity})`;
+                  skinSelect.appendChild(option);
+                });
+            });
+          });
+      })
+      .catch(err => console.error('Error populating owned skins:', err));
+  }
+  
+  
+  
+  listSkinForSale(skinId, price) {
+    if (!skinId || !price || price < 1) {
+      alert('Please select a skin and enter a valid price.');
+      return;
+    }
+  
+    fetch('/list-skin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: this.username, skinId, price })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert(`Listed skin for ${price} coins!`);
+          this.fetchSkinListings(1, true);
+          this.getUnlockedItems();
+          this.populateOwnedSkins();
+        } else {
+          alert(`Listing failed: ${data.error || 'Unknown error.'}`);
+        }
+      })
+      .catch(err => {
+        console.error('Error listing skin:', err);
+        alert('Listing failed due to a server error.');
+      });
+  }
+  
+  
+  
+  
+  fetchSkinListings(page = 1, replace = false) {
+    fetch(`/get-skin-listings?page=${page}&limit=10`)
+      .then(res => res.json())
+      .then(listings => {
+        const listingsDiv = document.getElementById('skin-listings');
+        if (replace) listingsDiv.innerHTML = '';
+  
+        if (listings.length === 0 && page === 1) {
+          listingsDiv.innerHTML = '<p>No listings available.</p>';
+          return;
+        }
+  
+        listings.forEach(item => {
+          const isOwner = item.seller_name === this.username;
+  
+          const listingElement = document.createElement('div');
+          listingElement.style.border = '1px solid #ccc';
+          listingElement.style.borderRadius = '8px';
+          listingElement.style.margin = '10px';
+          listingElement.style.padding = '10px';
+          listingElement.style.backgroundColor = '#1e1e1e';
+  
+          listingElement.innerHTML = `
+            <p><strong>Skin:</strong> ${item.skin_name}</p>
+            <p><strong>Rarity:</strong> ${item.rarity}</p>
+            <p><strong>Price:</strong> ${item.price} Coins</p>
+            <p><strong>Seller:</strong> ${item.seller_name}</p>
+            <img src="/skins/${item.image_url}.png" alt="${item.skin_name}" width="100" height="100" loading="lazy">
+          `;
+  
+          if (!isOwner) {
+            const buyButton = document.createElement('button');
+            buyButton.textContent = 'Buy';
+            buyButton.className = 'prompt-button';
+            buyButton.addEventListener('click', () => {
+              this.buySkinListing(item.listing_id);
+            });
+            listingElement.appendChild(buyButton);
+          } else {
+            const priceInput = document.createElement('input');
+            priceInput.type = 'number';
+            priceInput.min = 1;
+            priceInput.value = item.price;
+            priceInput.style.width = '60px';
+            priceInput.style.marginRight = '5px';
+  
+            const updateBtn = document.createElement('button');
+            updateBtn.textContent = 'Update Price';
+            updateBtn.className = 'prompt-button';
+            updateBtn.addEventListener('click', () => {
+              const newPrice = parseInt(priceInput.value);
+              if (newPrice < 1) return alert('Invalid price.');
+              this.updateSkinListing(item.listing_id, newPrice);
+            });
+  
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel Listing';
+            cancelBtn.className = 'prompt-button';
+            cancelBtn.addEventListener('click', () => {
+              this.cancelSkinListing(item.listing_id);
+            });
+  
+            listingElement.appendChild(document.createElement('br'));
+            listingElement.appendChild(priceInput);
+            listingElement.appendChild(updateBtn);
+            listingElement.appendChild(cancelBtn);
+          }
+  
+          listingsDiv.appendChild(listingElement);
+        });
+      })
+      .catch(err => {
+        console.error('Failed to fetch listings:', err);
+        const listingsDiv = document.getElementById('skin-listings');
+        listingsDiv.innerHTML = '<p style="color:red;">Failed to load listings. Please try again later.</p>';
+      });
+  }
+  
+  
+  
+  
+  buySkinListing(listingId) {
+    fetch('/buy-listed-skin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ buyerName: this.username, listingId: parseInt(listingId) })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert('Skin purchased successfully! The skin has been added to your inventory.');
+          document.getElementById('skin-marketplace-container').style.display = 'none';
+          this.fetchInfo();
+          this.getUnlockedItems();
+        } else {
+          alert(`Purchase failed: ${data.error || 'Unknown error'}`);
+        }
+      })
+      .catch(err => {
+        console.error('Error purchasing skin:', err);
+        alert('Purchase failed due to server error.');
+      });
+  }
+
+  updateSkinListing(listingId, newPrice) {
+    fetch('/update-skin-listing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ listingId, price: newPrice, username: this.username })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert('Listing updated.');
+          this.fetchSkinListings(1, true);
+          this.populateOwnedSkins();
+        } else {
+          alert(`Update failed: ${data.error}`);
+        }
+      })
+      .catch(err => {
+        console.error('Error updating listing:', err);
+        alert('Update failed due to server error.');
+      });
+  }
+  
+  
+  cancelSkinListing(listingId) {
+    fetch('/cancel-skin-listing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ listingId, username: this.username })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert('Listing removed.');
+          this.fetchSkinListings(1, true);
+          this.getUnlockedItems();
+          this.populateOwnedSkins();
+        } else {
+          alert(`Cancel failed: ${data.error}`);
+        }
+      })
+      .catch(err => console.error('Error canceling listing:', err));
   }
   
 }

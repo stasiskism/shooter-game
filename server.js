@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const http = require('http');
 const {Server} = require('socket.io');
 
@@ -17,6 +18,8 @@ app.use(express.static('src'));
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html')
 })
+
+app.use('/skins', express.static(path.join(__dirname, 'src/assets/V1.00/PNG')));
 
 app.use(bodyParser.json())
 
@@ -1091,6 +1094,220 @@ app.get('/get-marketplace-items', async (req, res) => {
       res.status(500).json({ error: 'Failed to load items.' });
     }
   });
+
+  app.get('/get-skin-listings', async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+  
+    try {
+      const client = await sql.connect();
+      const result = await client.query(`
+        SELECT l.listing_id, l.skin_id, l.price, ws.skin_name, ws.image_url, ws.rarity, l.seller_name
+        FROM skin_marketplace_listings l
+        JOIN weapon_skins ws ON l.skin_id = ws.skin_id
+        WHERE l.created_at >= NOW() - INTERVAL '7 days'
+        ORDER BY l.created_at DESC
+        LIMIT $1 OFFSET $2
+      `, [limit, offset]);
+      client.release();
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error fetching listings:', error);
+      res.status(500).json({ error: 'Failed to fetch listings' });
+    }
+  });
+  
+  
+
+  app.get('/get-all-skin-listings', async (req, res) => {
+    try {
+      const client = await sql.connect();
+      const listings = await client.query(`
+        SELECT l.listing_id, l.skin_id, l.price, ws.skin_name, ws.image_url, ws.rarity, l.seller_name
+        FROM skin_marketplace_listings l
+        JOIN weapon_skins ws ON l.skin_id = ws.skin_id
+      `);
+      client.release();
+      res.json(listings.rows);
+    } catch (error) {
+      console.error('Error fetching listings:', error);
+      res.status(500).json({ error: 'Failed to fetch listings' });
+    }
+  });
+  
+  app.post('/buy-listed-skin', async (req, res) => {
+    const { buyerName, listingId } = req.body;
+    const client = await sql.connect();
+  
+    try {
+      const listingResult = await client.query(
+        'SELECT * FROM skin_marketplace_listings WHERE listing_id = $1',
+        [listingId]
+      );
+  
+      if (listingResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Listing not found' });
+      }
+  
+      const listing = listingResult.rows[0];
+      const { seller_id, seller_name, skin_id, price } = listing;
+  
+      const buyerResult = await client.query(
+        'SELECT user_id, coins FROM user_profile WHERE user_name = $1',
+        [buyerName]
+      );
+      const buyer = buyerResult.rows[0];
+  
+      if (!buyer) return res.status(404).json({ error: 'Buyer not found' });
+  
+      if (buyer.coins < price) {
+        return res.status(400).json({ error: 'Not enough coins' });
+      }
+  
+      await client.query('BEGIN');
+  
+      await client.query(
+        'UPDATE user_profile SET coins = coins - $1 WHERE user_id = $2',
+        [price, buyer.user_id]
+      );
+  
+      await client.query(
+        'UPDATE user_profile SET coins = coins + $1 WHERE user_id = $2',
+        [price, seller_id]
+      );
+  
+      await client.query(
+        'DELETE FROM user_weapon_skins WHERE user_id = $1 AND skin_id = $2',
+        [seller_id, skin_id]
+      );
+  
+      await client.query(
+        `INSERT INTO user_weapon_skins (user_id, user_name, item_type, skin_id)
+         VALUES ($1, $2, 'skin', $3)`,
+        [buyer.user_id, buyerName, skin_id]
+      );
+  
+      await client.query('DELETE FROM skin_marketplace_listings WHERE listing_id = $1', [listingId]);
+  
+      await client.query('COMMIT');
+      res.json({ success: true });
+  
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error processing skin purchase:', error);
+      res.status(500).json({ error: 'Failed to buy skin' });
+    } finally {
+      client.release();
+    }
+  });
+  
+
+  app.get('/get-skin-details', async (req, res) => {
+    const skinId = req.query.skinId;
+    try {
+      const client = await sql.connect();
+      const result = await client.query(
+        'SELECT skin_name, rarity FROM weapon_skins WHERE skin_id = $1',
+        [skinId]
+      );
+      client.release();
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Skin not found' });
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Error getting skin details:', error);
+      res.status(500).json({ error: 'Failed to fetch skin details' });
+    }
+  });
+
+  app.post('/list-skin', async (req, res) => {
+    const { username, skinId, price } = req.body;
+    const client = await sql.connect();
+  
+    try {
+      const result = await client.query(
+        'SELECT user_id FROM user_authentication WHERE user_name = $1',
+        [username]
+      );
+      const userId = result.rows[0].user_id;
+  
+      const owns = await client.query(
+        'SELECT * FROM user_weapon_skins WHERE user_id = $1 AND skin_id = $2',
+        [userId, skinId]
+      );
+      if (owns.rows.length === 0) {
+        return res.status(400).json({ error: 'You do not own this skin.' });
+      }
+  
+      const alreadyListed = await client.query(
+        'SELECT 1 FROM skin_marketplace_listings WHERE seller_id = $1 AND skin_id = $2',
+        [userId, skinId]
+      );
+      if (alreadyListed.rows.length > 0) {
+        return res.status(400).json({ error: 'You already listed this skin for sale.' });
+      }
+  
+      await client.query(
+        'INSERT INTO skin_marketplace_listings (seller_id, seller_name, skin_id, price) VALUES ($1, $2, $3, $4)',
+        [userId, username, skinId, price]
+      );
+  
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error listing skin:', error);
+      res.status(500).json({ error: 'Failed to list skin' });
+    } finally {
+      client.release();
+    }
+  });
+  
+  app.post('/update-skin-listing', async (req, res) => {
+    const { listingId, price, username } = req.body;
+    const client = await sql.connect();
+  
+    try {
+      const result = await client.query(
+        'UPDATE skin_marketplace_listings SET price = $1 WHERE listing_id = $2 AND seller_name = $3',
+        [price, listingId, username]
+      );
+  
+      if (result.rowCount === 0) {
+        return res.status(403).json({ error: 'You are not allowed to update this listing.' });
+      }
+  
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error updating listing:', error);
+      res.status(500).json({ error: 'Failed to update listing.' });
+    } finally {
+      client.release();
+    }
+  });
+  
+  
+  app.post('/cancel-skin-listing', async (req, res) => {
+    const { listingId, username } = req.body;
+    const client = await sql.connect();
+  
+    try {
+      const result = await client.query(
+        'DELETE FROM skin_marketplace_listings WHERE listing_id = $1 AND seller_name = $2',
+        [listingId, username]
+      );
+  
+      if (result.rowCount === 0) {
+        return res.status(403).json({ error: 'You are not allowed to cancel this listing.' });
+      }
+  
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error canceling listing:', error);
+      res.status(500).json({ error: 'Failed to cancel listing.' });
+    } finally {
+      client.release();
+    }
+  });
+  
   
 
 setInterval(async () => {

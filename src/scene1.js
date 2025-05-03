@@ -94,10 +94,10 @@ class Scene1 extends Phaser.Scene {
         this.load.tilemapTiledJSON('map2', 'assets/mapsss.json');
         this.load.image("tiles_multiplayer", 'assets/32x32_DEMO.png');
         this.load.tilemapTiledJSON('map2', 'assets/Multiplayer_Map.json');
-        this.load.image("skin1_pistol", 'assets/V1.00/PNG/pistol-gold.png');
-        this.load.image("skin1_ar", 'assets/V1.00/PNG/ar-green.png');
-        this.load.image("skin1_shotgun", 'assets/V1.00/PNG/shotgun-golden.png');
-        this.load.image("skin1_sniper", 'assets/V1.00/PNG/sniper-blue.png');
+        this.load.image("skin1_pistol", 'assets/V1.00/PNG/skin1_pistol.png');
+        this.load.image("skin1_ar", 'assets/V1.00/PNG/skin1_ar.png');
+        this.load.image("skin1_shotgun", 'assets/V1.00/PNG/skin1_shotgun.png');
+        this.load.image("skin1_sniper", 'assets/V1.00/PNG/skin1_sniper.png');
     }
 
     create () {
