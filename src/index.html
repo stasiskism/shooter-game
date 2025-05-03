@@ -1,166 +1,179 @@
 <!DOCTYPE html>
 <html lang="en-ca">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2DCS</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://js.stripe.com/v3/"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2DCS</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://js.stripe.com/v3/"></script>
 </head>
 <body>
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-    </script>
-    <script src="phaser.min.js"></script>
-    <script type="module" src="main.js"></script>
 
-    <div id="prompt-container" style="display: none;">
-        <div class="prompt">
-            Do you really want to logout?
-            <div>
-                <div class="prompt-button prompt-button-yes" id="yesButton">Yes</div>
-                <div class="prompt-button prompt-button-no" id="noButton">No</div>
-            </div>
-        </div>
-    </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+  </script>
+  <script src="phaser.min.js"></script>
+  <script type="module" src="main.js"></script>
 
-    <div id="overlay" style="display: none;"></div>
+  <div id="overlay" style="display: none;"></div>
 
-    <div id="create-room-container" style="display: none;">
-        <div class="prompt">
-    
-            <div id="private-room-prompt" class="prompt-message">
-                Do you want this room to be private?
-                <div>
-                    <div class="prompt-button" id="privateYesButton">Yes</div>
-                    <div class="prompt-button" id="privateNoButton">No</div>
-                </div>
-                <div class="prompt-button" id="privateCancelButton">Cancel</div>
-            </div>
-    
-            <div id="max-players-prompt" class="prompt-message" style="display: none;">
-                <div>
-                    Enter the maximum number of players (2-4):<br>
-                    <input type="text" id="maxPlayersInput" class="prompt-input">
-                </div>
-                <div>
-                    Enter a room name (optional):<br>
-                    <input type="text" id="roomNameInput" class="prompt-input">
-                </div>
-                <div id="roomPasswordContainer" style="display: none;">
-                    Enter a password for the private room:<br>
-                    <input type="password" id="roomPasswordInput" class="prompt-input">
-                </div>
-                <div class="prompt-button" id="maxPlayersButton">Submit</div>
-                <div class="prompt-button" id="maxPlayersCancelButton">Cancel</div>
-            </div>
-
-            <div id="join-password-prompt" class="prompt-message" style="display: none;">
-                Enter the room password:
-                <input type="password" id="joinRoomPasswordInput" class="prompt-input">
-                <div class="prompt-button" id="joinRoomPasswordButton">Join</div>
-                <div class="prompt-button" id="joinRoomPasswordCancelButton">Cancel</div>
-            </div>
-    
-        </div>
-    </div>
-
-    <div id="room-list-container" style="display: none;">
-        <div class="prompt">
-            <div id="room-list-prompt" class="prompt-message">
-                <div style="margin-bottom: 10px;">Available Rooms:</div>
-                <div id="roomListEntries" style="max-height: 300px; overflow-y: auto;"></div>
-                <div class="prompt-button" id="roomListCloseButton">Close</div>
-            </div>
-        </div>
-    </div>
-    
-    
-
-    <div id="code-room-container" style="display: none;">
-        <div class="prompt">
-            <div id="code-room-prompt" class="prompt-message">
-                Enter the code of the room:
-                <input type="text" id="roomCodeInput" class="prompt-input">
-                <div class="prompt-button" id="roomCodeButton">Submit</div>
-                <div class="prompt-button" id="roomCodeCancelButton">Cancel</div>
-            </div>
-        </div>
-    </div>
-
-    <div id="search-room-container" style="display: none;">
-        <div class="prompt">
-            <div id="search-room-prompt" class="prompt-message">
-                Searching for a room...
-                <div class="prompt-button" id="searchCancelButton">Cancel</div>
-            </div>
-        </div>
-    </div>
-
-    <div id="exit-prompt-container" style="display: none;">
-        <div class="prompt">
-            Do you really want to exit to the main menu?
-            <div>
-                <div class="prompt-button" id="exitYesButton">Yes</div>
-                <div class="prompt-button" id="exitNoButton">No</div>
-            </div>
-        </div>
-    </div>
-
-    <div id="coin-purchase-container" style="display: none;">
-        <div class="prompt">
-            <div id="coin-purchase-prompt" class="prompt-message">
-                Purchase Coins
-                <div id="coin-options"></div>
-                <div class="prompt-button" id="coinCancelButton">Cancel</div>
-            </div>
-        </div>
-    </div>
-
-    <div id="weapon-purchase-container" style="display: none;">
-        <div class="prompt">
-            <div id="weapon-purchase-prompt" class="prompt-message">
-                Do you really want to buy this weapon?
-                <div>
-                    <div class="prompt-button prompt-button-yes" id="purchaseYesButton">Yes</div>
-                    <div class="prompt-button prompt-button-no" id="purchaseNoButton">No</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="purchase-success-container" style="display: none;">
-        <div class="prompt">
-            <div id="purchase-success-message" class="prompt-message">
-                Purchased successfully!
-                <div class="prompt-button" id="successCloseButton">Close</div>
-            </div>
-        </div>
-    </div>
-
-    <div id="skin-marketplace-container" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 800px; height: 700px; background: rgba(0,0,0,0.8); border: 2px solid #fff; overflow-y: scroll; padding: 20px; color: #fff; z-index: 10;">
-        <h2>Skin Marketplace</h2>
-      
-        <div id="skin-listings"></div>
-      
-        <hr style="margin: 20px 0;">
-      
-        <div id="list-skin-section">
-          <h3>List Your Skin</h3>
-          <label for="owned-skins">Select Skin:</label>
-          <select id="owned-skins"></select>
-      
-          <label for="listing-price">Set Price (Coins):</label>
-          <input type="number" id="listing-price" min="1" style="width: 100px;">
-      
-          <button id="list-skin-button" class="prompt-button">List Skin for Sale</button>
-        </div>
-      
-        <button id="close-skin-marketplace" class="prompt-button" style="margin-top: 20px;">Close</button>
+  <div id="prompt-container" style="display: none;">
+    <div class="prompt">
+      Do you really want to logout?
+      <div>
+        <div class="prompt-button prompt-button-yes" id="yesButton">Yes</div>
+        <div class="prompt-button prompt-button-no" id="noButton">No</div>
       </div>
-      
-      
-    
+    </div>
+  </div>
+
+  <div id="create-room-container" style="display: none;">
+    <div class="prompt">
+      <div id="private-room-prompt" class="prompt-message">
+        Do you want this room to be private?
+        <div>
+          <div class="prompt-button" id="privateYesButton">Yes</div>
+          <div class="prompt-button" id="privateNoButton">No</div>
+        </div>
+        <div class="prompt-button" id="privateCancelButton">Cancel</div>
+      </div>
+
+      <div id="max-players-prompt" class="prompt-message" style="display: none;">
+        <div>
+          Enter the maximum number of players (2–4):<br>
+          <input type="text" id="maxPlayersInput" class="prompt-input">
+        </div>
+        <div>
+          Enter a room name (optional):<br>
+          <input type="text" id="roomNameInput" class="prompt-input">
+        </div>
+        <div id="roomPasswordContainer" style="display: none;">
+          Enter a password:<br>
+          <input type="password" id="roomPasswordInput" class="prompt-input">
+        </div>
+        <div class="prompt-button" id="maxPlayersButton">Submit</div>
+        <div class="prompt-button" id="maxPlayersCancelButton">Cancel</div>
+      </div>
+
+      <div id="join-password-prompt" class="prompt-message" style="display: none;">
+        Enter the room password:
+        <input type="password" id="joinRoomPasswordInput" class="prompt-input">
+        <div class="prompt-button" id="joinRoomPasswordButton">Join</div>
+        <div class="prompt-button" id="joinRoomPasswordCancelButton">Cancel</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="room-list-container" style="display: none;">
+    <div class="prompt">
+      <div id="room-list-prompt" class="prompt-message">
+        <div style="margin-bottom: 10px;">Available Rooms:</div>
+        <div id="roomListEntries" style="max-height: 300px; overflow-y: auto;"></div>
+        <div class="prompt-button" id="roomListCloseButton">Close</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="code-room-container" style="display: none;">
+    <div class="prompt">
+      <div id="code-room-prompt" class="prompt-message">
+        Enter the code of the room:
+        <input type="text" id="roomCodeInput" class="prompt-input">
+        <div class="prompt-button" id="roomCodeButton">Submit</div>
+        <div class="prompt-button" id="roomCodeCancelButton">Cancel</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="search-room-container" style="display: none;">
+    <div class="prompt">
+      <div id="search-room-prompt" class="prompt-message">
+        Searching for a room...
+        <div class="prompt-button" id="searchCancelButton">Cancel</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="exit-prompt-container" style="display: none;">
+    <div class="prompt">
+      Do you really want to exit to the main menu?
+      <div>
+        <div class="prompt-button" id="exitYesButton">Yes</div>
+        <div class="prompt-button" id="exitNoButton">No</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="coin-purchase-container" style="display: none;">
+    <div class="prompt">
+      <div id="coin-purchase-prompt" class="prompt-message">
+        Purchase Coins
+        <div id="coin-options"></div>
+        <div class="prompt-button" id="coinCancelButton">Cancel</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="weapon-purchase-container" style="display: none;">
+    <div class="prompt">
+      <div id="weapon-purchase-prompt" class="prompt-message">
+        Do you really want to buy this weapon?
+        <div>
+          <div class="prompt-button prompt-button-yes" id="purchaseYesButton">Yes</div>
+          <div class="prompt-button prompt-button-no" id="purchaseNoButton">No</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="purchase-success-container" style="display: none;">
+    <div class="prompt">
+      <div id="purchase-success-message" class="prompt-message">
+        Purchased successfully!
+        <div class="prompt-button" id="successCloseButton">Close</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="skin-marketplace-container" style="display: none; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); width: 800px; height: 700px; background: rgba(0,0,0,0.8);
+    border: 2px solid #fff; overflow-y: scroll; padding: 20px; color: #fff; z-index: 10;">
+    <button id="close-skin-marketplace" style="position: sticky; top: 0; float: right;
+      background: #444; color: white; border: none; padding: 8px 12px;
+      font-size: 16px; border-radius: 5px; cursor: pointer; z-index: 100;">✖</button>
+    <h2 style="margin-top: 10px;">Skin Marketplace</h2>
+    <div id="skin-listings"></div>
+    <hr style="margin: 20px 0;">
+    <div id="list-skin-section">
+      <h3>List Your Skin</h3>
+      <label for="owned-skins">Select Skin:</label>
+      <select id="owned-skins"></select>
+      <label for="listing-price">Set Price (Coins):</label>
+      <input type="number" id="listing-price" min="1" style="width: 100px;">
+      <button id="list-skin-button" class="prompt-button">List Skin for Sale</button>
+    </div>
+  </div>
+
+  <div id="weapon-marketplace-container" style="display: none; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); width: 800px; height: 700px; background: rgba(0,0,0,0.8);
+    border: 2px solid #fff; overflow-y: scroll; padding: 20px; color: #fff; z-index: 10;">
+    <button id="close-weapon-marketplace" style="position: sticky; top: 0; float: right;
+      background: #444; color: white; border: none; padding: 8px 12px;
+      font-size: 16px; border-radius: 5px; cursor: pointer; z-index: 100;">✖</button>
+    <h2 style="margin-top: 10px;">Weapon Marketplace</h2>
+    <div id="weapon-listings"></div>
+  </div>
+
+  <div id="ingame-skin-kiosk-container" style="display: none; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); width: 800px; height: 600px; background: rgba(0,0,0,0.9);
+    color: white; z-index: 10; overflow-y: auto; padding: 20px;">
+    <button id="close-ingame-skin-kiosk" style="position: sticky; top: 0; float: right;
+      background: #444; color: white; border: none; padding: 8px 12px;
+      font-size: 16px; border-radius: 5px; cursor: pointer; z-index: 100;">✖</button>
+    <h2 style="margin-top: 10px;">Weapon Skins Kiosk</h2>
+    <div id="ingame-skin-listings"></div>
+  </div>
+
 </body>
 </html>

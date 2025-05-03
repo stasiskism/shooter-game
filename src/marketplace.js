@@ -54,49 +54,24 @@ class Marketplace extends Phaser.Scene {
     this.player = this.physics.add.sprite(247, 517, 'idleDown').setScale(3);
     this.player.setCollideWorldBounds(true);
 
-    this.gunObjects = this.physics.add.staticGroup();
-    this.gun1Object = this.gunObjects.create(432, 400, 'Pistol');
-    this.gun2Object = this.gunObjects.create(785, 400, 'Shotgun');
-    this.gun3Object = this.gunObjects.create(1140, 400, 'AR');
-    this.gun4Object = this.gunObjects.create(1460, 400, 'Sniper');
-
-    this.skinObjects = this.physics.add.staticGroup();
-    this.skin1Objects = this.skinObjects.create(332, 250, 'skin1_pistol');
-    this.skin2Objects = this.skinObjects.create(685, 250, 'skin1_shotgun');
-    this.skin3Objects = this.skinObjects.create(1040, 250, 'skin1_ar');
-    this.skin4Objects = this.skinObjects.create(1360, 250, 'skin1_sniper');
-    
-    
+    this.kioskObjects = this.physics.add.staticGroup();
 
 
+    this.weaponKiosk = this.kioskObjects.create(432, 400, 'weapon_shop');
+    this.weaponKiosk.setScale(0.2);
 
-    this.gunObjects.getChildren().forEach(object => {
-      object.setScale(1.5);
+    this.skinKiosk = this.kioskObjects.create(785, 400, 'weaponskins_shop');
+    this.skinKiosk.setScale(0.2);
+
+    this.tradeKiosk = this.kioskObjects.create(1140, 400, 'trading_shop'); // sekantis 1360
+    this.tradeKiosk.setScale(0.2);
+
+    this.popupText = this.add.text(100, 100, '', {
+      fontFamily: 'Arial',
+      fontSize: 24,
+      color: '#ffffff'
     });
-
-    this.skinObjects.getChildren().forEach(object => {
-      object.setScale(1.5);
-    });
-
-    this.grenadeObjects = this.physics.add.staticGroup();
-    this.grenade1Object = this.grenadeObjects.create(785, 650, 'smokeGrenade');
-    this.grenade2Object = this.grenadeObjects.create(1110, 650, 'grenade');
-
-    this.grenadeObjects.getChildren().forEach(object => {
-      object.setScale(3);
-    });
-
-    this.popupText = this.add.text(100, 100, '', { fontFamily: 'Arial', fontSize: 24, color: '#ffffff' });
     this.popupText.setVisible(false);
-
-    this.purchaseText = this.add.text(this.centerX, this.centerY, '', { fontFamily: 'Arial', fontSize: 64, color: '#ffffff', align: 'center' });
-    this.purchaseText.setOrigin(0.5, 0.5);
-    this.purchaseText.setVisible(false);
-
-    this.physics.add.overlap(this.player, this.gunObjects, this.interactWithObject, null, this);
-    this.physics.add.overlap(this.player, this.grenadeObjects, this.interactWithObject, null, this);
-    this.physics.add.overlap(this.player, this.skinObjects, this.interactWithObject, null, this);
-
 
     this.coinsText = this.add.text(960, 30, 'Coins: ', { fontFamily: 'Arial', fontSize: 24, color: '#ffffff' });
     this.plusButton = this.add.sprite(1120, 40, 'plus').setScale(0.05).setInteractive({ useHandCursor: true });
@@ -314,7 +289,22 @@ class Marketplace extends Phaser.Scene {
 
   update() {
     this.updatePlayerMovement();
+  
+    let inRangeOfKiosk = false;
+  
+    this.kioskObjects.getChildren().forEach(kiosk => {
+      const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, kiosk.x, kiosk.y);
+      if (distance < 50) {
+        this.interactWithObject(this.player, kiosk);
+        inRangeOfKiosk = true;
+      }
+    });
+  
+    if (!inRangeOfKiosk) {
+      this.popupText.setVisible(false);
+    }
   }
+  
 
   updatePlayerMovement() {
     if (!this.player) return;
@@ -368,51 +358,84 @@ class Marketplace extends Phaser.Scene {
   interactWithObject(player, object) {
     const distance = Phaser.Math.Distance.Between(player.x, player.y, object.x, object.y);
   
-    if (distance < 50 && !this.interactionCooldown && this.marketplaceItems) {
-      const textureKey = object.texture.key;
+    if (distance < 50) {
+      if (object === this.weaponKiosk) {
+        this.popupText.setText('Press E to open Weapon Kiosk');
+        this.popupText.setPosition(player.x - 50, player.y - 50);
+        this.popupText.setVisible(true);
   
-      const item = this.marketplaceItems.find(item => item.texture_key === textureKey);
-      if (!item) return;
+        if (this.eKey.isDown && !this.weaponMarketplaceVisible) {
+          const container = document.getElementById('weapon-marketplace-container');
+          container.style.display = 'block';
+          this.weaponMarketplaceVisible = true;
   
-      const { item_id, item_type, name, cost, required_level } = item;
+          this.populateWeaponKiosk();
   
-      const alreadyUnlocked =
-        (item_type === 'weapon' && this.unlockedWeapons.includes(item_id)) ||
-        (item_type === 'grenade' && this.unlockedGrenades.includes(item_id)) ||
-        (item_type === 'skin' && this.unlockedSkins?.includes(item_id));
-  
-      this.currentObject = {
-        weaponId: item_type === 'weapon' ? item_id : 0,
-        grenadeId: item_type === 'grenade' ? item_id : 0,
-        skinId: item_type === 'skin' ? item_id : 0,
-        itemName: name,
-        requiredLevel: required_level,
-        cost
-      };
-  
-      this.isInteracting = true;
-  
-      if (alreadyUnlocked) {
-        this.popupText.setText(`${name} is already unlocked.`);
-      } else if (this.level >= required_level) {
-        this.popupText.setText(`Unlock ${name} for ${cost} coins. Press E to buy.`);
-        if (this.eKey.isDown) this.showPurchasePrompt();
-      } else {
-        this.popupText.setText(`Level ${required_level} required to unlock ${name}.`);
+          const closeBtn = document.getElementById('close-weapon-marketplace');
+          if (closeBtn) {
+            closeBtn.onclick = () => {
+              container.style.display = 'none';
+              this.weaponMarketplaceVisible = false;
+            };
+          }
+        }
       }
   
-      this.popupText.setPosition(player.x - 50, player.y - 50);
-      this.popupText.setVisible(true);
+      else if (object === this.skinKiosk) {
+        this.popupText.setText('Press E to browse in-game skins');
+        this.popupText.setPosition(player.x - 50, player.y - 50);
+        this.popupText.setVisible(true);
+  
+        if (this.eKey.isDown && !this.ingameSkinKioskVisible) {
+          this.openIngameSkinShop();
+        }
+      }
+  
+      else if (object === this.tradeKiosk) {
+        this.popupText.setText('Press E to open Trade Marketplace');
+        this.popupText.setPosition(player.x - 50, player.y - 50);
+        this.popupText.setVisible(true);
+  
+        if (this.eKey.isDown && !this.skinMarketplaceVisible) {
+          this.currentPage = 1;
+          this.fetchSkinListings(this.currentPage, true);
+          this.populateOwnedSkins();
+  
+          const container = document.getElementById('skin-marketplace-container');
+          container.style.display = 'block';
+          this.skinMarketplaceVisible = true;
+  
+          this.scrollHandler = () => {
+            const scrollBottom = container.scrollTop + container.clientHeight;
+            const scrollHeight = container.scrollHeight;
+            if (scrollBottom >= scrollHeight - 50) {
+              this.currentPage++;
+              this.fetchSkinListings(this.currentPage, false);
+            }
+          };
+  
+          container.addEventListener('scroll', this.scrollHandler);
+  
+          const closeBtn = document.getElementById('close-skin-marketplace');
+          if (closeBtn) {
+            closeBtn.onclick = () => {
+              container.style.display = 'none';
+              this.skinMarketplaceVisible = false;
+              container.removeEventListener('scroll', this.scrollHandler);
+            };
+          }
+        }
+      }
+      else {
+        this.popupText.setVisible(false);
+      }
+  
     } else {
       this.popupText.setVisible(false);
-      this.currentObject = null;
-      this.isInteracting = false;
     }
   }
   
   
-  
-
   showPurchasePrompt() {
     const promptContainer = document.getElementById('weapon-purchase-container');
     promptContainer.style.display = 'block';
@@ -459,42 +482,47 @@ class Marketplace extends Phaser.Scene {
   }
 
   buyItem() {
-    if (!this.isInteracting) return;
   
     const { weaponId, grenadeId, skinId, itemName, requiredLevel, cost } = this.currentObject;
   
-    if (this.coins >= cost) {
-      this.coins -= cost;
-      this.coinsText.setText(`Coins: ${this.coins}`);
-  
-      if (weaponId) {
-        socket.emit('buyGun', { socket: socket.id, weaponId });
-      } else if (grenadeId) {
-        socket.emit('buyGrenade', { socket: socket.id, grenadeId });
-      } else if (skinId) {
-        socket.emit('buySkin', { socket: socket.id, skinId });
-  
-        const container = document.getElementById('skin-marketplace-container');
-        if (container && container.style.display !== 'none') {
-          setTimeout(() => {
-            this.fetchSkinListings(1, true);
-            this.getUnlockedItems();
-          }, 300);
-        }
-      }
-  
-      this.showSuccessMessage();
-  
-    } else {
-      this.purchaseText.setText(`Not enough coins to buy ${itemName}.`);
-      this.purchaseText.setStyle({ fontSize: '64px', fill: '#ff0000', align: 'center' });
-      this.purchaseText.setVisible(true);
-      this.time.addEvent({ delay: 2000, callback: () => this.purchaseText.setVisible(false) });
+    if (skinId && this.unlockedSkins.includes(skinId)) {
+      this.showCustomPrompt(`You already own ${itemName}.`);
+      this.resetPurchaseState();
+      return;
+    }
+
+    if (this.coins < cost) {
+      this.showCustomPrompt(`Not enough coins to buy ${itemName}.`);
+      this.resetPurchaseState();
+      return;
     }
   
-    this.currentObject = null;
-    this.isInteracting = false;
+    this.coins -= cost;
+    this.coinsText.setText(`Coins: ${this.coins}`);
+  
+    if (weaponId) {
+      socket.emit('buyGun', { socket: socket.id, weaponId });
+      this.showCustomPrompt(`Purchased ${itemName} successfully!`);
+    } else if (grenadeId) {
+      socket.emit('buyGrenade', { socket: socket.id, grenadeId });
+      this.showCustomPrompt(`Purchased ${itemName} successfully!`);
+    } else if (skinId) {
+      socket.emit('buySkin', { socket: socket.id, skinId });
+      this.showCustomPrompt(`Purchased ${itemName} successfully!`);
+  
+      const container = document.getElementById('skin-marketplace-container');
+      if (container && container.style.display !== 'none') {
+        setTimeout(() => {
+          this.fetchSkinListings(1, true);
+          this.getUnlockedItems();
+        }, 300);
+      }
+    }
+  
+    this.getUnlockedItems();
+    this.resetPurchaseState();
   }
+  
 
   setupProgressBar() {
     this.barWidth = 200;
@@ -889,7 +917,120 @@ class Marketplace extends Phaser.Scene {
   
     closeButton.addEventListener('click', handler);
   }
+
+  populateWeaponKiosk() {
+    const listingsDiv = document.getElementById('weapon-listings');
+    listingsDiv.innerHTML = '';
   
+    fetch('/get-marketplace-items')
+      .then(res => res.json())
+      .then(items => {
+        const weaponsAndGrenades = items.filter(item =>
+          item.item_type === 'weapon' || item.item_type === 'grenade'
+        );
+  
+        if (weaponsAndGrenades.length === 0) {
+          listingsDiv.innerHTML = '<p>No weapons or grenades available.</p>';
+          return;
+        }
+  
+        weaponsAndGrenades.forEach(item => {
+          const entry = document.createElement('div');
+          entry.className = 'marketplace-entry';
+  
+          let imageUrl = item.name.toLowerCase();
+  
+          if (item.item_type === 'grenade') {
+            if (item.name === 'Smoke Grenade') {
+              imageUrl = 'smokeGrenade';
+            } else if (item.name === 'Explosive Grenade') {
+              imageUrl = 'grenade';
+            }
+          }
+  
+          entry.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px;">
+              <img src="/weapons/${imageUrl}.png" alt="${item.name}" width="100" height="100" style="border: 1px solid #ccc;">
+              <div>
+                <p><strong>${item.name}</strong></p>
+                <p>Cost: ${item.cost} Coins</p>
+                <p>Level: ${item.required_level}</p>
+                <button class="prompt-button" data-id="${item.item_id}" data-type="${item.item_type}">Buy</button>
+              </div>
+            </div>
+          `;
+  
+          entry.querySelector('button').addEventListener('click', () => {
+            this.currentObject = {
+              weaponId: item.item_type === 'weapon' ? item.item_id : 0,
+              grenadeId: item.item_type === 'grenade' ? item.item_id : 0,
+              itemName: item.name,
+              requiredLevel: item.required_level,
+              cost: item.cost
+            };
+            this.showPurchasePrompt();
+          });
+  
+          listingsDiv.appendChild(entry);
+        });
+      })
+      .catch(err => {
+        listingsDiv.innerHTML = '<p style="color: red;">Failed to load items.</p>';
+        console.error(err);
+      });
+  }
+  
+
+  openIngameSkinShop() {
+    const container = document.getElementById('ingame-skin-kiosk-container');
+    const listingsDiv = document.getElementById('ingame-skin-listings');
+    container.style.display = 'block';
+    this.ingameSkinKioskVisible = true;
+    listingsDiv.innerHTML = '';
+  
+    fetch('/get-marketplace-items')
+      .then(res => res.json())
+      .then(data => {
+        const skins = data.filter(item => item.item_type === 'skin');
+        skins.forEach(skin => {
+          const entry = document.createElement('div');
+          entry.className = 'marketplace-entry';
+          entry.innerHTML = `
+            <img src="/skins/${skin.texture_key.toLowerCase()}.png" width="100" height="100">
+            <p><strong>${skin.name}</strong></p>
+            <p>Cost: ${skin.cost} Coins</p>
+            <p>Required Level: ${skin.required_level}</p>
+            <button class="prompt-button">Buy</button>
+          `;
+  
+          entry.querySelector('button').addEventListener('click', () => {
+            this.currentObject = {
+              skinId: skin.item_id,
+              itemName: skin.name,
+              requiredLevel: skin.required_level,
+              cost: skin.cost
+            };
+            this.showPurchasePrompt();
+          });
+
+          const closeBtn = document.getElementById('close-ingame-skin-kiosk');
+          if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+            const container = document.getElementById('ingame-skin-kiosk-container');
+            container.style.display = 'none';
+            this.ingameSkinKioskVisible = false;
+            });
+          }
+  
+          listingsDiv.appendChild(entry);
+        });
+      });
+  }
+  
+  resetPurchaseState() {
+    this.currentObject = null;
+    this.isInteracting = false;
+  }
   
 }
 

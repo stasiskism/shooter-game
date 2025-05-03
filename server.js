@@ -19,7 +19,9 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html')
 })
 
-app.use('/skins', express.static(path.join(__dirname, 'src/assets/V1.00/PNG')));
+app.use('/skins', express.static(path.join(__dirname, 'src/assets/V1.00/PNG/skins')));
+app.use('/weapons', express.static(path.join(__dirname, 'src/assets/V1.00/PNG/weapons')));
+
 
 app.use(bodyParser.json())
 
@@ -824,6 +826,7 @@ io.on('connection', (socket) => {
     })
 
     socket.on('buyGun', async (data) => {
+        console.log("perka ginkla")
         try {
             const { socket, weaponId } = data;
             const username = playerUsername[socket];
@@ -849,6 +852,7 @@ io.on('connection', (socket) => {
     });
     
     socket.on('buyGrenade', async (data) => {
+        console.log("perka granat")
         try {
             const { socket, grenadeId } = data;
             const username = playerUsername[socket];
@@ -872,6 +876,7 @@ io.on('connection', (socket) => {
 
 
     socket.on('buySkin', async (data) => {
+        console.log("perka skina")
         try {
           const { socket: socketId, skinId } = data;
           const username = playerUsername[socketId];
@@ -891,14 +896,12 @@ io.on('connection', (socket) => {
       
           const cost = costResult.rows[0].cost;
           const itemType = costResult.rows[0].item_type;
-      
-          // Deduct coins
+    
           await client.query(
             'UPDATE user_profile SET coins = coins - $1 WHERE user_name = $2',
             [cost, username]
           );
-      
-          // Insert skin ownership with required fields
+          
           await client.query(
             'INSERT INTO user_weapon_skins (user_id, user_name, item_type, skin_id) VALUES ($1, $2, $3, $4)',
             [userId, username, itemType, skinId]

@@ -37,18 +37,18 @@ class Scene1 extends Phaser.Scene {
         this.load.image('multiplayer', 'assets/multiplayer.png');
         this.load.image('singleplayer', 'assets/singleplayer.png');
         this.load.image("tiles", 'assets/assetas.png')
-        this.load.image('smokeGrenade', 'assets/smokeGrenade.png')
-        this.load.image('grenade', 'assets/grenade.png')
-        this.load.image('AR', 'assets/V1.00/PNG/ar.png')
+        this.load.image('smokeGrenade', 'assets/V1.00/PNG/weapons/smokeGrenade.png')
+        this.load.image('grenade', 'assets/V1.00/PNG/weapons/grenade.png')
+        this.load.image('AR', 'assets/V1.00/PNG/weapons/ar.png')
         this.load.spritesheet('shootAR', 'assets/V1.00/Sprite-sheets/Assault_rifle_V1.00/WEAPON/[SINGLE_SHOT] Assault_rifle_V1.00.png', { frameWidth: 128, frameHeight: 48 });
         this.load.spritesheet('reloadAR', 'assets/V1.00/Sprite-sheets/Assault_rifle_V1.00/WEAPON/[RELOAD] Assault_rifle_V1.00 - Reload.png', { frameWidth: 96, frameHeight: 64 });
-        this.load.image('Pistol', 'assets/V1.00/PNG/pistol.png')
+        this.load.image('Pistol', 'assets/V1.00/PNG/weapons/pistol.png')
         this.load.spritesheet('shootPistol', 'assets/V1.00/Sprite-sheets/Pistol_V1.00/Weapon/fullpistolshooy.png', {frameWidth: 64, frameHeight: 28})
         this.load.spritesheet('reloadPistol', 'assets/V1.00/Sprite-sheets/Pistol_V1.00/Weapon/pistolReload.png', {frameWidth: 80, frameHeight: 48})
-        this.load.image('Shotgun', 'assets/V1.00/PNG/shotgun.png')
+        this.load.image('Shotgun', 'assets/V1.00/PNG/weapons/shotgun.png')
         this.load.spritesheet('shootShotgun', 'assets/V1.00/Sprite-sheets/Shotgun_V1.00/Weapon/shootShotgun.png', {frameWidth: 157, frameHeight: 29})
         this.load.spritesheet('reloadShotgun', 'assets/V1.00/Sprite-sheets/Shotgun_V1.00/Weapon/shotgunReload.png', {frameWidth: 127, frameHeight: 32})
-        this.load.image('Sniper', 'assets/V1.00/PNG/sniper.png')
+        this.load.image('Sniper', 'assets/V1.00/PNG/weapons/sniper.png')
         this.load.spritesheet('shootSniper', 'assets/V1.00/Sprite-sheets/sniper/WEAPON/sniperShoot.png', {frameWidth: 128, frameHeight: 32})
         this.load.spritesheet('reloadSniper', 'assets/V1.00/Sprite-sheets/sniper/WEAPON/sniperReload.png', {frameWidth: 128, frameHeight: 32})
         this.load.spritesheet('reloadSniperBullets', 'assets/V1.00/Sprite-sheets/sniper/FX/reloadSniper.png', {frameWidth: 96, frameHeight: 64})
@@ -94,10 +94,13 @@ class Scene1 extends Phaser.Scene {
         this.load.tilemapTiledJSON('map2', 'assets/mapsss.json');
         this.load.image("tiles_multiplayer", 'assets/32x32_DEMO.png');
         this.load.tilemapTiledJSON('map2', 'assets/Multiplayer_Map.json');
-        this.load.image("skin1_pistol", 'assets/V1.00/PNG/skin1_pistol.png');
-        this.load.image("skin1_ar", 'assets/V1.00/PNG/skin1_ar.png');
-        this.load.image("skin1_shotgun", 'assets/V1.00/PNG/skin1_shotgun.png');
-        this.load.image("skin1_sniper", 'assets/V1.00/PNG/skin1_sniper.png');
+        this.load.image("skin1_pistol", 'assets/V1.00/PNG/skins/skin1_pistol.png');
+        this.load.image("skin1_ar", 'assets/V1.00/PNG/skins/skin1_ar.png');
+        this.load.image("skin1_shotgun", 'assets/V1.00/PNG/skins/skin1_shotgun.png');
+        this.load.image("skin1_sniper", 'assets/V1.00/PNG/skins/skin1_sniper.png');
+        this.load.image("weapon_shop", 'assets/marketplace/weapon_shop.png');
+        this.load.image("weaponskins_shop", 'assets/marketplace/weaponskins_shop.png');
+        this.load.image("trading_shop", 'assets/marketplace/trading_shop.png');
     }
 
     create () {
