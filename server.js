@@ -919,7 +919,111 @@ io.on('connection', (socket) => {
       });
       
 
-
+      socket.on('updateChallengeProgress', async ({ type, amount }) => {
+        try {
+          const username = playerUsername[socket.id];
+          if (!username) return;
+      
+          const client = await sql.connect();
+      
+          const userResult = await client.query(
+            'SELECT user_id FROM user_authentication WHERE user_name = $1',
+            [username]
+          );
+          const userId = userResult.rows[0]?.user_id;
+          if (!userId) {
+            client.release();
+            return;
+          }
+      
+          const challengeQuery = `
+            SELECT challenge_id FROM challenges
+            WHERE type IN ('daily', 'weekly') AND LOWER(trigger_key) = LOWER($1)
+          `;
+          const challengeResult = await client.query(challengeQuery, [type]);
+      
+          for (const row of challengeResult.rows) {
+            await client.query(`
+              INSERT INTO user_challenges (user_id, challenge_id, progress)
+              VALUES ($1, $2, $3)
+              ON CONFLICT (user_id, challenge_id)
+              DO UPDATE SET progress = user_challenges.progress + EXCLUDED.progress
+            `, [userId, row.challenge_id, amount]);
+      
+            await client.query(`
+              UPDATE user_challenges
+              SET completed = TRUE
+              WHERE user_id = $1 AND challenge_id = $2 AND progress >= (
+                SELECT target FROM challenges WHERE challenge_id = $2
+              )
+            `, [userId, row.challenge_id]);
+          }
+      
+          client.release();
+        } catch (err) {
+          console.error('Error updating challenge progress:', err);
+        }
+      });
+      
+      
+      socket.on('claimChallengeReward', async ({ challengeId }) => {
+        try {
+          const username = playerUsername[socket.id];
+          if (!username) return;
+      
+          const client = await sql.connect();
+      
+          const userResult = await client.query(
+            'SELECT user_id FROM user_authentication WHERE user_name = $1',
+            [username]
+          );
+          const userId = userResult.rows[0]?.user_id;
+          if (!userId) {
+            client.release();
+            return;
+          }
+      
+          const progressCheck = await client.query(`
+            SELECT uc.progress, uc.completed, uc.is_claimed,
+                   c.target,
+                   COALESCE(c.reward_coins, 0) AS reward_coins,
+                   COALESCE(c.reward_xp, 0) AS reward_xp
+            FROM user_challenges uc
+            JOIN challenges c ON c.challenge_id = uc.challenge_id
+            WHERE uc.user_id = $1 AND uc.challenge_id = $2
+          `, [userId, challengeId]);
+      
+          const challenge = progressCheck.rows[0];
+          if (!challenge || !challenge.completed || challenge.is_claimed || challenge.progress < challenge.target) {
+            client.release();
+            return;
+          }
+      
+          await client.query(`
+            UPDATE user_profile
+            SET coins = coins + $1, xp = xp + $2
+            WHERE user_id = $3
+          `, [challenge.reward_coins, challenge.reward_xp, userId]);
+      
+          await client.query(`
+            UPDATE user_challenges
+            SET is_claimed = TRUE
+            WHERE user_id = $1 AND challenge_id = $2
+          `, [userId, challengeId]);
+      
+          socket.emit('challengeClaimed', {
+            challengeId,
+            coins: challenge.reward_coins,
+            xp: challenge.reward_xp
+          });
+      
+          client.release();
+        } catch (err) {
+          console.error('Error claiming challenge reward:', err);
+        }
+      });
+      
+      
     
 
 });
@@ -1352,7 +1456,114 @@ app.get('/get-weapons', async (req, res) => {
       client.release();
     }
   });
+
+  app.get('/get-challenges', async (req, res) => {
+    const username = req.query.username;
+    const client = await sql.connect();
   
+    try {
+      const userResult = await client.query(
+        'SELECT user_id FROM user_authentication WHERE user_name = $1',
+        [username]
+      );
+      const userId = userResult.rows[0]?.user_id;
+  
+      if (!userId) return res.status(400).json({ error: 'Invalid user' });
+  
+      const maxGroupResult = await client.query('SELECT MAX(rotation_group) AS max FROM challenges');
+      const maxGroup = maxGroupResult.rows[0].max || 1;
+  
+      const weeksSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24 * 7));
+      const rotationGroup = (weeksSinceEpoch % maxGroup) + 1;
+  
+      const activeChallenges = await client.query(
+        `SELECT challenge_id FROM challenges WHERE rotation_group = $1 AND type IN ('daily', 'weekly')`,
+        [rotationGroup]
+      );
+  
+      for (const row of activeChallenges.rows) {
+        await client.query(`
+          INSERT INTO user_challenges (user_id, challenge_id, progress, completed)
+          VALUES ($1, $2, 0, false)
+          ON CONFLICT (user_id, challenge_id) DO NOTHING
+        `, [userId, row.challenge_id]);
+      }
+  
+      const challengeResult = await client.query(`
+        SELECT 
+  c.challenge_id, 
+  c.title, 
+  c.description, 
+  c.type, 
+  c.target, 
+  c.reward_coins, 
+  c.reward_xp,
+  COALESCE(uc.progress, 0) AS progress,
+  uc.completed,
+  COALESCE(uc.is_claimed, false) AS is_claimed
+FROM challenges c
+LEFT JOIN user_challenges uc 
+  ON c.challenge_id = uc.challenge_id AND uc.user_id = $1
+WHERE c.rotation_group = $2 AND c.type IN ('daily', 'weekly')
+      `, [userId, rotationGroup]);
+  
+      res.json(challengeResult.rows);
+  
+    } catch (err) {
+      console.error('Error fetching challenges:', err);
+      res.status(500).json({ error: 'Failed to load challenges' });
+    } finally {
+      client.release();
+    }
+  });
+  
+  
+  
+  
+
+app.post('/update-challenge-progress', async (req, res) => {
+    const { username, challengeId, amount } = req.body;
+    const client = await sql.connect();
+
+    try {
+        const userResult = await client.query('SELECT user_id FROM user_authentication WHERE user_name = $1', [username]);
+        const userId = userResult.rows[0].user_id;
+
+        await client.query(`
+            INSERT INTO user_challenges (user_id, challenge_id, progress)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, challenge_id)
+            DO UPDATE SET progress = user_challenges.progress + EXCLUDED.progress
+        `, [userId, challengeId, amount]);
+
+        const progressResult = await client.query(`
+            SELECT progress, completed, target FROM user_challenges uc
+            JOIN challenges c ON c.challenge_id = uc.challenge_id
+            WHERE uc.user_id = $1 AND uc.challenge_id = $2
+        `, [userId, challengeId]);
+
+        const row = progressResult.rows[0];
+        if (!row.completed && row.progress >= row.target) {
+            await client.query(`UPDATE user_challenges SET completed = TRUE WHERE user_id = $1 AND challenge_id = $2`, [userId, challengeId]);
+
+            await client.query(`
+                UPDATE user_profile 
+                SET coins = coins + $1, xp = xp + $2 
+                WHERE user_id = $3
+            `, [row.reward_coins, row.reward_xp, userId]);
+
+            return res.json({ completed: true, rewardCoins: row.reward_coins, rewardXP: row.reward_xp });
+        }
+
+        res.json({ completed: false });
+    } catch (err) {
+        console.error('Error updating challenge progress:', err);
+        res.status(500).json({ error: 'Failed to update progress' });
+    } finally {
+        client.release();
+    }
+});
+
   
 
 setInterval(async () => {

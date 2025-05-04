@@ -31,6 +31,17 @@ class MainMenu extends Phaser.Scene {
     this.setupInputEvents();
     this.settingsButton = new SettingsButtonWithPanel(this, 1890, 90);
     this.events.on('settingsPanelOpened', this.onSettingsPanelOpened, this);
+    const challengeButton = this.add.text(1650, 90, 'Challenges', {
+      fontSize: '24px',
+      fill: '#fff',
+      backgroundColor: '#333',
+      padding: { x: 10, y: 5 }
+    })
+    .setInteractive()
+    .on('pointerdown', () => {
+      this.showChallengesUI();
+    });
+
   }
 
   onSettingsPanelOpened() {
@@ -251,6 +262,59 @@ class MainMenu extends Phaser.Scene {
       })
       .catch(error => console.error('Error fetching leaderboard data:', error));
   }
+
+  showChallengesUI() {
+    fetch(`/get-challenges?username=${this.username}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!Array.isArray(data)) {
+          throw new Error("Expected array but got: " + JSON.stringify(data));
+        }
+  
+        const container = document.getElementById('challenges-ui');
+        const list = document.getElementById('challenges-list');
+        list.innerHTML = '';
+  
+        data.forEach(ch => {
+          const progressText = `Progress: ${ch.progress}/${ch.target}`;
+          const isComplete = ch.completed;
+          const isClaimed = ch.is_claimed;
+  
+          const challengeItem = document.createElement('div');
+          challengeItem.style.marginBottom = '10px';
+  
+          challengeItem.innerHTML = `
+            <strong>${ch.title}</strong><br/>
+            ${ch.description}<br/>
+            ${progressText}<br/>
+            ${isComplete && !isClaimed ? '<span style="color: lightgreen">Reward Ready!</span>' : ''}
+            ${isClaimed ? '<span style="color: gray">Reward Claimed</span>' : ''}
+          `;
+  
+          if (isComplete && !isClaimed) {
+            const claimButton = document.createElement('button');
+            claimButton.textContent = 'Claim Reward';
+            claimButton.onclick = () => {
+              socket.emit('claimChallengeReward', { challengeId: ch.challenge_id });
+              socket.once('challengeClaimed', ({ challengeId, coins, xp }) => {
+                alert(`+${coins} Coins, +${xp} XP`);
+                this.showChallengesUI();
+              });
+            };
+            challengeItem.appendChild(document.createElement('br'));
+            challengeItem.appendChild(claimButton);
+          }
+  
+          list.appendChild(challengeItem);
+        });
+  
+        container.style.display = 'block';
+      })
+      .catch(err => console.error('Failed to load challenges:', err));
+  }
+  
+  
+
 }
 
 export default MainMenu;
