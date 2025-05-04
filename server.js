@@ -1090,8 +1090,8 @@ app.get('/get-weapons', async (req, res) => {
       const maxGroupResult = await client.query('SELECT MAX(rotation_group) AS max FROM weapon_skins');
       const maxGroup = maxGroupResult.rows[0].max || 1;
   
-      const currentWeek = Math.ceil(Date.now() / (1000 * 60 * 60 * 24 * 7));
-      const calculatedGroup = ((currentWeek - 1) % maxGroup) + 1;
+      const weeksSinceEpoch = Math.ceil(Date.now() / (1000 * 60 * 60 * 24 * 7));
+      const calculatedGroup = ((weeksSinceEpoch - 1) % maxGroup) + 1;
   
       const groupCheck = await client.query(
         'SELECT COUNT(*) FROM weapon_skins WHERE rotation_group = $1',
@@ -1099,15 +1099,21 @@ app.get('/get-weapons', async (req, res) => {
       );
       const hasSkins = parseInt(groupCheck.rows[0].count) > 0;
       const rotationGroup = hasSkins ? calculatedGroup : 1;
-      
+  
       const result = await client.query(`
-        SELECT m.item_id, m.item_type, m.name, m.cost, m.required_level, m.texture_key
+        SELECT 
+          m.item_id, 
+          m.item_type, 
+          m.name, 
+          m.cost, 
+          m.required_level,
+          ws.image_url
         FROM marketplace m
-        LEFT JOIN weapon_skins ws ON m.item_id = ws.skin_id AND m.item_type = 'skin'
+        LEFT JOIN weapon_skins ws 
+          ON m.item_type = 'skin' AND m.item_id = ws.skin_id
         WHERE 
-          (m.item_type IN ('weapon', 'grenade'))
-          OR
-          (m.item_type = 'skin' AND ws.rotation_group = $1)
+          m.item_type IN ('weapon', 'grenade') 
+          OR (m.item_type = 'skin' AND ws.rotation_group = $1)
       `, [rotationGroup]);
   
       res.json(result.rows);
@@ -1118,6 +1124,7 @@ app.get('/get-weapons', async (req, res) => {
       client.release();
     }
   });
+  
   
 
   app.get('/get-skin-listings', async (req, res) => {

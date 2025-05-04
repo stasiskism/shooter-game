@@ -996,7 +996,7 @@ class Marketplace extends Phaser.Scene {
           const entry = document.createElement('div');
           entry.className = 'marketplace-entry';
           entry.innerHTML = `
-            <img src="/skins/${skin.texture_key.toLowerCase()}.png" width="100" height="100">
+            <img src="/skins/${skin.image_url.toLowerCase()}.png" width="100" height="100">
             <p><strong>${skin.name}</strong></p>
             <p>Cost: ${skin.cost} Coins</p>
             <p>Required Level: ${skin.required_level}</p>
