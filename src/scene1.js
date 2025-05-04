@@ -101,6 +101,7 @@ class Scene1 extends Phaser.Scene {
         this.load.image("weapon_shop", 'assets/marketplace/weapon_shop.png');
         this.load.image("weaponskins_shop", 'assets/marketplace/weaponskins_shop.png');
         this.load.image("trading_shop", 'assets/marketplace/trading_shop.png');
+        this.load.image('marketplace', 'assets/marketplace.png')
     }
 
     create () {
