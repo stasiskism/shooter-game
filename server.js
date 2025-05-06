@@ -720,6 +720,9 @@ io.on('connection', (socket) => {
         }
         delete filterPlayersByMultiplayerId(multiplayerId)
         delete filterProjectilesByMultiplayerId(multiplayerId)
+        const client = await sql.connect()
+        await client.query(`UPDATE user_profile SET coins = coins + 10, xp = xp + 20 WHERE user_name = $1`, [username])
+        client.release()
         delete readyPlayers[multiplayerId];
         delete rooms[multiplayerId];
     })
@@ -813,6 +816,9 @@ io.on('connection', (socket) => {
                 if (backendGrenades[grenadeId].playerId !== playerId && backendPlayers[backendGrenades[grenadeId].playerId]) {
                     const client = await sql.connect();
                     if (!backendPlayers[backendGrenades[grenadeId].playerId].username) return
+                    await client.query(`UPDATE user_profile SET coins = coins + 1, xp = xp + 5 WHERE user_name = $1`, [
+                        backendPlayers[backendGrenades[grenadeId].playerId].username
+                        ]);
                     client.release();
                 }
                 delete backendPlayers[playerId];
@@ -1618,6 +1624,9 @@ setInterval(async () => {
                 if (backendPlayers[playerId].health <= 0) {
                     if (backendPlayers[shooterId]) {
                         const client = await sql.connect();
+                        await client.query(`UPDATE user_profile SET coins = coins + 1, xp = xp + 5 WHERE user_name = $1`, [
+                            lastHit
+                        ]);
                         client.release();
                     }
                     delete backendPlayers[playerId];
