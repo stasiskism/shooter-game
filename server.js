@@ -724,8 +724,8 @@ io.on('connection', (socket) => {
         const client = await sql.connect()
         await client.query(`UPDATE user_profile SET coins = coins + 10, xp = xp + 20 WHERE user_name = $1`, [username])
         client.release()
-        await updateChallengeProgress(username, 'win_match', 1);
-        await updateChallengeProgress(username, 'reach_xp', 5);
+        await updateProgress(username, 'win_match', 1);
+        await updateProgress(username, 'reach_xp', 5);
         delete readyPlayers[multiplayerId];
         delete rooms[multiplayerId];
     })
@@ -936,9 +936,9 @@ io.on('connection', (socket) => {
       });
       
 
-      socket.on('updateChallengeProgress', async ({ type, amount }) => {
+      socket.on('updateProgress', async ({ type, amount }) => {
         const username = playerUsername[socket.id];
-        await updateChallengeProgress(username, type, amount);
+        await updateProgress(username, type, amount);
       });
       
       
@@ -1000,7 +1000,63 @@ io.on('connection', (socket) => {
       });
       
       
-    
+      socket.on('claimAchievement', async ({ achievementId }) => {
+        try {
+          const username = playerUsername[socket.id];
+          if (!username) return;
+      
+          const client = await sql.connect();
+      
+          const userResult = await client.query(
+            'SELECT user_id FROM user_authentication WHERE user_name = $1',
+            [username]
+          );
+          const userId = userResult.rows[0]?.user_id;
+          if (!userId) {
+            client.release();
+            return;
+          }
+      
+          const progressResult = await client.query(`
+            SELECT ua.progress, ua.completed, ua.is_claimed,
+                   a.target,
+                   COALESCE(a.reward_coins, 0) AS reward_coins,
+                   COALESCE(a.reward_xp, 0) AS reward_xp
+            FROM user_achievements ua
+            JOIN achievements a ON ua.achievement_id = a.achievement_id
+            WHERE ua.user_id = $1 AND ua.achievement_id = $2
+          `, [userId, achievementId]);
+      
+          const achievement = progressResult.rows[0];
+          if (!achievement || !achievement.completed || achievement.is_claimed || achievement.progress < achievement.target) {
+            client.release();
+            return;
+          }
+      
+          await client.query(`
+            UPDATE user_profile
+            SET coins = coins + $1, xp = xp + $2
+            WHERE user_id = $3
+          `, [achievement.reward_coins, achievement.reward_xp, userId]);
+      
+          await client.query(`
+            UPDATE user_achievements
+            SET is_claimed = TRUE
+            WHERE user_id = $1 AND achievement_id = $2
+          `, [userId, achievementId]);
+      
+          socket.emit('achievementClaimed', {
+            achievementId,
+            coins: achievement.reward_coins,
+            xp: achievement.reward_xp
+          });
+      
+          client.release();
+        } catch (err) {
+          console.error('Error claiming achievement:', err);
+        }
+      });
+      
 
 });
 
@@ -1160,11 +1216,12 @@ function reload(reloadTime, bullets, id) {
 }
 
 
-async function updateChallengeProgress(username, type, amount) {
+async function updateProgress(username, type, amount) {
     try {
       if (!username) return;
   
       const client = await sql.connect();
+  
       const userResult = await client.query(
         'SELECT user_id FROM user_authentication WHERE user_name = $1',
         [username]
@@ -1197,11 +1254,34 @@ async function updateChallengeProgress(username, type, amount) {
         `, [userId, row.challenge_id]);
       }
   
+      const achievementResult = await client.query(`
+        SELECT achievement_id FROM achievements
+        WHERE LOWER(trigger_key) = LOWER($1)
+      `, [type]);
+  
+      for (const row of achievementResult.rows) {
+        await client.query(`
+          INSERT INTO user_achievements (user_id, achievement_id, progress)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (user_id, achievement_id)
+          DO UPDATE SET progress = user_achievements.progress + EXCLUDED.progress
+        `, [userId, row.achievement_id, amount]);
+  
+        await client.query(`
+          UPDATE user_achievements
+          SET completed = TRUE
+          WHERE user_id = $1 AND achievement_id = $2 AND progress >= (
+            SELECT target FROM achievements WHERE achievement_id = $2
+          )
+        `, [userId, row.achievement_id]);
+      }
+  
       client.release();
     } catch (err) {
-      console.error('Error updating challenge progress:', err);
+      console.error('Error updating progress:', err);
     }
   }
+  
   
   
 
@@ -1685,7 +1765,7 @@ setInterval(async () => {
                             lastHit
                         ]);
                         client.release();
-                        await updateChallengeProgress(lastHit, 'reach_xp', 5);
+                        await updateProgress(lastHit, 'reach_xp', 5);
                     }
                     delete backendPlayers[playerId];
                 }
