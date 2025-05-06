@@ -484,6 +484,18 @@ class Marketplace extends Phaser.Scene {
   buyItem() {
   
     const { weaponId, grenadeId, skinId, itemName, requiredLevel, cost } = this.currentObject;
+
+    if (weaponId && this.unlockedWeapons.includes(weaponId)) {
+      this.showCustomPrompt(`You already own ${itemName}.`);
+      this.resetPurchaseState();
+      return;
+    }
+  
+    if (grenadeId && this.unlockedGrenades.includes(grenadeId)) {
+      this.showCustomPrompt(`You already own ${itemName}.`);
+      this.resetPurchaseState();
+      return;
+    }
   
     if (skinId && this.unlockedSkins.includes(skinId)) {
       this.showCustomPrompt(`You already own ${itemName}.`);

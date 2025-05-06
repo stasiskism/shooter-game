@@ -826,7 +826,6 @@ io.on('connection', (socket) => {
     })
 
     socket.on('buyGun', async (data) => {
-        console.log("perka ginkla")
         try {
             const { socket, weaponId } = data;
             const username = playerUsername[socket];
@@ -852,7 +851,6 @@ io.on('connection', (socket) => {
     });
     
     socket.on('buyGrenade', async (data) => {
-        console.log("perka granat")
         try {
             const { socket, grenadeId } = data;
             const username = playerUsername[socket];
@@ -876,7 +874,6 @@ io.on('connection', (socket) => {
 
 
     socket.on('buySkin', async (data) => {
-        console.log("perka skina")
         try {
           const { socket: socketId, skinId } = data;
           const username = playerUsername[socketId];
