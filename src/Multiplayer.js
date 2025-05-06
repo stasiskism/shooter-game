@@ -253,17 +253,17 @@ class Multiplayer extends Phaser.Scene {
                 alivePlayers[id] = true;
             }
 
-            // const alivePlayerCount = Object.keys(alivePlayers).length;
-            // if (alivePlayerCount === 1) {
-            //     this.gameStop = true
-            //     const id = Object.keys(alivePlayers)[0]
-            //     this.gameWon(backendPlayers[id].username)
-            //     this.playerAmmo.destroy()
-            //     this.playerHealth[id].container.destroy()
-            //     this.playerUsername[id].destroy()
-            //     this.stopShooting()
-            //     socket.off('updatePlayers')
-            // }
+            const alivePlayerCount = Object.keys(alivePlayers).length;
+            if (alivePlayerCount === 1) {
+                this.gameStop = true
+                const id = Object.keys(alivePlayers)[0]
+                this.gameWon(backendPlayers[id].username)
+                this.playerAmmo.destroy()
+                this.playerHealth[id].container.destroy()
+                this.playerUsername[id].destroy()
+                this.stopShooting()
+                socket.off('updatePlayers')
+            }
 
             for (const id in this.frontendPlayers) {
                 if (!alivePlayers[id]) {
@@ -450,7 +450,6 @@ class Multiplayer extends Phaser.Scene {
 
     setupGrenade(playerId, id, backendGrenade) {
         const grenadeName = this.grenades[backendGrenade.grenadeId]
-        console.log(grenadeName, "cia")
         const grenade = this.physics.add.sprite(backendGrenade.x, backendGrenade.y, '' + grenadeName).setScale(4)
         const direction = Phaser.Math.Angle.Between(
             this.frontendPlayers[playerId].x,
@@ -758,7 +757,6 @@ class Multiplayer extends Phaser.Scene {
                 }
             } else {
                 if (this.darkOverlay[playerId]) {
-                    console.log('destroying dark overlay for player:', playerId);
                     this.darkOverlay[playerId].destroy();
                     delete this.darkOverlay[playerId];
                 }
@@ -781,8 +779,7 @@ class Multiplayer extends Phaser.Scene {
                 )
                 if (Phaser.Geom.Intersects.RectangleToRectangle(player.getBounds(), smallerBounds)
                     && (!this.playersAffected[grenadeId] || !this.playersAffected[grenadeId][id])) {
-                    console.log('granatoj')
-                    socket.emit('explode', { playerId: id, grenadeId })
+                    socket.emit('explode', { playerId: id, grenadeId });
                     if (!this.playersAffected[grenadeId]) {
                         this.playersAffected[grenadeId] = {};
                     }

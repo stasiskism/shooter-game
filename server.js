@@ -406,7 +406,6 @@ io.on('connection', (socket) => {
 
     socket.on('updateReadyState', ({playerId, isReady, roomId}) => {
         readyPlayers[roomId][playerId] = isReady
-        console.log('readyPlayers:', readyPlayers)
         io.to(roomId).emit('updateReadyPlayers', calculateReadyPlayers(readyPlayers[roomId]))
     })
 
@@ -434,6 +433,7 @@ io.on('connection', (socket) => {
                                 const grenadeDetailResult = await client.query('SELECT damage FROM grenades WHERE grenade_id = $1', [grenadeId])
                                 const weapons = weaponDetailsResult.rows[0];
                                 const grenades = grenadeDetailResult.rows[0]
+                                console.log("cia va tikrinu pries viska: ", grenades.damage, " ir player id: ", playerId)
                                 weaponDetails[playerId] = weapons;
                                 grenadeDetails[playerId] = grenades
                                 delete readyPlayers[roomId][playerId];
@@ -536,6 +536,7 @@ io.on('connection', (socket) => {
                 target,
                 grenadeId: backendPlayers[socket.id].grenadeId
             }
+            console.log(" cia ismeta granata: ", backendPlayers[socket.id].grenadeId)
         } 
     })
 
@@ -723,6 +724,8 @@ io.on('connection', (socket) => {
         const client = await sql.connect()
         await client.query(`UPDATE user_profile SET coins = coins + 10, xp = xp + 20 WHERE user_name = $1`, [username])
         client.release()
+        await updateChallengeProgress(username, 'win_match', 1);
+        await updateChallengeProgress(username, 'reach_xp', 5);
         delete readyPlayers[multiplayerId];
         delete rooms[multiplayerId];
     })
@@ -807,24 +810,35 @@ io.on('connection', (socket) => {
 
 
     socket.on('explode', async (data) => {
-        const playerId = data.playerId
-        const grenadeId = data.grenadeId
-        const damage = grenadeDetails[playerId].damage
-        if (backendPlayers[playerId]) {
-            backendPlayers[playerId].health -= damage
-            if (backendPlayers[playerId].health <= 0) {
-                if (backendGrenades[grenadeId].playerId !== playerId && backendPlayers[backendGrenades[grenadeId].playerId]) {
-                    const client = await sql.connect();
-                    if (!backendPlayers[backendGrenades[grenadeId].playerId].username) return
-                    await client.query(`UPDATE user_profile SET coins = coins + 1, xp = xp + 5 WHERE user_name = $1`, [
-                        backendPlayers[backendGrenades[grenadeId].playerId].username
-                        ]);
-                    client.release();
+    const { playerId, grenadeId } = data;
+    const grenade = backendGrenades[grenadeId];
+
+    if (!grenade) return;
+
+    const damage = grenadeDetails[grenade.playerId]?.damage;
+    if (!damage) return;
+
+    if (backendPlayers[playerId]) {
+        backendPlayers[playerId].health -= damage;
+
+        if (backendPlayers[playerId].health <= 0) {
+            const killerId = grenade.playerId;
+            if (killerId !== playerId && backendPlayers[killerId]) {
+                const client = await sql.connect();
+                const username = backendPlayers[killerId].username;
+                if (username) {
+                    await client.query(`UPDATE user_profile SET coins = coins + 1, xp = xp + 5 WHERE user_name = $1`, [username]);
                 }
-                delete backendPlayers[playerId];
+                client.release();
             }
+            delete backendPlayers[playerId];
         }
-    })
+    }
+
+    delete backendGrenades[grenadeId];
+});
+
+    
 
     socket.on('gunAnimation', (data) => {
         const {multiplayerId, playerId, animation, weapon} = data
@@ -923,49 +937,8 @@ io.on('connection', (socket) => {
       
 
       socket.on('updateChallengeProgress', async ({ type, amount }) => {
-        try {
-          const username = playerUsername[socket.id];
-          if (!username) return;
-      
-          const client = await sql.connect();
-      
-          const userResult = await client.query(
-            'SELECT user_id FROM user_authentication WHERE user_name = $1',
-            [username]
-          );
-          const userId = userResult.rows[0]?.user_id;
-          if (!userId) {
-            client.release();
-            return;
-          }
-      
-          const challengeQuery = `
-            SELECT challenge_id FROM challenges
-            WHERE type IN ('daily', 'weekly') AND LOWER(trigger_key) = LOWER($1)
-          `;
-          const challengeResult = await client.query(challengeQuery, [type]);
-      
-          for (const row of challengeResult.rows) {
-            await client.query(`
-              INSERT INTO user_challenges (user_id, challenge_id, progress)
-              VALUES ($1, $2, $3)
-              ON CONFLICT (user_id, challenge_id)
-              DO UPDATE SET progress = user_challenges.progress + EXCLUDED.progress
-            `, [userId, row.challenge_id, amount]);
-      
-            await client.query(`
-              UPDATE user_challenges
-              SET completed = TRUE
-              WHERE user_id = $1 AND challenge_id = $2 AND progress >= (
-                SELECT target FROM challenges WHERE challenge_id = $2
-              )
-            `, [userId, row.challenge_id]);
-          }
-      
-          client.release();
-        } catch (err) {
-          console.error('Error updating challenge progress:', err);
-        }
+        const username = playerUsername[socket.id];
+        await updateChallengeProgress(username, type, amount);
       });
       
       
@@ -1132,10 +1105,49 @@ function startGame(multiplayerId) {
             skinId: skinIds[id] || null
         };
 
-        console.log('backendPlayers:', filterPlayersByMultiplayerId(multiplayerId));
     });
 }
 }
+
+// function startGame(multiplayerId) {
+//     if (rooms[multiplayerId] && rooms[multiplayerId].players) {
+//         rooms[multiplayerId].gameStarted = true;
+//         const playersInRoom = rooms[multiplayerId].players;
+
+//         // Set a fixed spawn point for all players
+//         const spawnPoint = { x: 960, y: 540 }; // center of a 1920x1080 screen
+
+//         playersInRoom.forEach((player) => {
+//             const id = player.id;
+//             const username = playerUsername[id];
+//             const weaponId = weaponIds[id];
+//             const bullets = weaponDetails[id].ammo;
+//             const firerate = weaponDetails[id].fire_rate;
+//             const reload = weaponDetails[id].reload;
+//             const radius = weaponDetails[id].radius;
+//             const grenadeId = grenadeIds[id];
+
+//             backendPlayers[id] = {
+//                 id,
+//                 multiplayerId,
+//                 x: spawnPoint.x,
+//                 y: spawnPoint.y,
+//                 score: 0,
+//                 username,
+//                 health: 100,
+//                 bullets,
+//                 firerate,
+//                 reload,
+//                 radius,
+//                 grenades: 1,
+//                 grenadeId,
+//                 weaponId,
+//                 skinId: skinIds[id] || null
+//             };
+//         });
+//     }
+// }
+
 
 function reload(reloadTime, bullets, id) {
     reloadingStatus[id] = true
@@ -1146,6 +1158,52 @@ function reload(reloadTime, bullets, id) {
         reloadingStatus[id] = false
     }, reloadTime) //RELOAD TIME CHANGE BASED ON WEAPON
 }
+
+
+async function updateChallengeProgress(username, type, amount) {
+    try {
+      if (!username) return;
+  
+      const client = await sql.connect();
+      const userResult = await client.query(
+        'SELECT user_id FROM user_authentication WHERE user_name = $1',
+        [username]
+      );
+      const userId = userResult.rows[0]?.user_id;
+      if (!userId) {
+        client.release();
+        return;
+      }
+  
+      const challengeResult = await client.query(`
+        SELECT challenge_id FROM challenges
+        WHERE type IN ('daily', 'weekly') AND LOWER(trigger_key) = LOWER($1)
+      `, [type]);
+  
+      for (const row of challengeResult.rows) {
+        await client.query(`
+          INSERT INTO user_challenges (user_id, challenge_id, progress)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (user_id, challenge_id)
+          DO UPDATE SET progress = user_challenges.progress + EXCLUDED.progress
+        `, [userId, row.challenge_id, amount]);
+  
+        await client.query(`
+          UPDATE user_challenges
+          SET completed = TRUE
+          WHERE user_id = $1 AND challenge_id = $2 AND progress >= (
+            SELECT target FROM challenges WHERE challenge_id = $2
+          )
+        `, [userId, row.challenge_id]);
+      }
+  
+      client.release();
+    } catch (err) {
+      console.error('Error updating challenge progress:', err);
+    }
+  }
+  
+  
 
 
 app.get('/get-info', async (req, res) => {
@@ -1494,23 +1552,25 @@ app.get('/get-weapons', async (req, res) => {
   
       const challengeResult = await client.query(`
         SELECT 
-  c.challenge_id, 
-  c.title, 
-  c.description, 
-  c.type, 
-  c.target, 
-  c.reward_coins, 
-  c.reward_xp,
-  COALESCE(uc.progress, 0) AS progress,
-  uc.completed,
-  COALESCE(uc.is_claimed, false) AS is_claimed
-FROM challenges c
-LEFT JOIN user_challenges uc 
-  ON c.challenge_id = uc.challenge_id AND uc.user_id = $1
-WHERE c.rotation_group = $2 AND c.type IN ('daily', 'weekly')
-      `, [userId, rotationGroup]);
-  
-      res.json(challengeResult.rows);
+            c.challenge_id,
+            c.title,
+            c.description,
+            c.type,
+            c.target,
+            c.reward_coins,
+            c.reward_xp,
+            COALESCE(uc.progress, 0)     AS progress,
+            uc.completed,
+            COALESCE(uc.is_claimed, false) AS is_claimed
+        FROM challenges c
+        LEFT JOIN user_challenges uc 
+            ON c.challenge_id = uc.challenge_id AND uc.user_id = $1
+        WHERE c.rotation_group = $2
+          AND c.type IN ('daily', 'weekly')
+    `, [userId, rotationGroup]);
+    
+    res.json(challengeResult.rows);
+    
   
     } catch (err) {
       console.error('Error fetching challenges:', err);
@@ -1519,9 +1579,6 @@ WHERE c.rotation_group = $2 AND c.type IN ('daily', 'weekly')
       client.release();
     }
   });
-  
-  
-  
   
 
 app.post('/update-challenge-progress', async (req, res) => {
@@ -1628,6 +1685,7 @@ setInterval(async () => {
                             lastHit
                         ]);
                         client.release();
+                        await updateChallengeProgress(lastHit, 'reach_xp', 5);
                     }
                     delete backendPlayers[playerId];
                 }
@@ -1652,11 +1710,11 @@ setInterval(async () => {
                 setTimeout(() => {
                     delete backendGrenades[id];
                 }, 1000);
-            } else if (backendGrenades[id].grenadeId === 6) {
-                setTimeout(() => {
-                    delete backendGrenades[id];
-                }, 400); //2000
-            }
+            // } else if (backendGrenades[id].grenadeId === 6) {
+            //     setTimeout(() => {
+            //         delete backendGrenades[id];
+            //     }, 400); //2000
+             }
         }
     }
 
