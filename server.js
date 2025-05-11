@@ -359,6 +359,12 @@ io.on('connection', (socket) => {
             rooms[roomId].players.push({ id: socket.id, roomId, x: 1920 / 2, y: 1080 / 2, username, weaponId, grenadeId });
             console.log('room joined', roomId)
             socket.join(roomId);
+            socket.emit('roomJoined', {
+                roomId,
+                gamemode: rooms[roomId].gamemode || 'last_man_standing',
+                hostId: rooms[roomId].host
+            });
+            socket.emit('roomGamemode', rooms[roomId].gamemode || 'last_man_standing');
             rooms[roomId].players = rooms[roomId].players.filter(player => player.id);
             if (!readyPlayers[roomId]) {
                 readyPlayers[roomId] = {}
@@ -402,6 +408,10 @@ io.on('connection', (socket) => {
         } else {
             socket.emit('roomJoinFailed', 'Room is full or does not exist');
         }
+    });
+
+    socket.on('updateGamemode', ({ roomId, gamemode }) => {
+        io.to(roomId).emit('roomGamemode', gamemode);
     });
 
     socket.on('updateReadyState', ({playerId, isReady, roomId}) => {
