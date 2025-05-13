@@ -39,6 +39,8 @@ class Room extends Phaser.Scene {
     init(data) {
         this.roomId = data.roomId
         this.mapSize = data.mapSize
+        this.gamemode = data.gamemode || 'last_man_standing';
+        this.hostId = data.hostId;
     }
     preload() {
         this.graphics = this.add.graphics()
@@ -116,19 +118,21 @@ class Room extends Phaser.Scene {
         });
 
         socket.on('countdownEnd', () => {
-            this.scene.start('Multiplayer', {multiplayerId: this.roomId, mapSize: this.mapSize})
-            this.scene.stop()
-            
+            const sceneToStart = this.gamemode === 'deathmatch' ? 'Deathmatch' : 'Multiplayer';
+            this.scene.start(sceneToStart, { multiplayerId: this.roomId, mapSize: this.mapSize });
+            this.scene.stop();
+
             for (const id in this.frontendPlayers) {
-                this.frontendPlayers[id].anims.stop()
+                this.frontendPlayers[id].anims.stop();
                 this.frontendPlayers[id].destroy();
                 this.playerUsernameText[id].destroy();
                 delete this.frontendPlayers[id];
                 delete this.playerUsernameText[id];
             }
-            this.chatHistory = []
-            socket.off('updateRoomPlayers')
-        })
+            
+            this.chatHistory = [];
+            socket.off('updateRoomPlayers');
+        });
 
         socket.on('playerAnimationUpdate', animData => {
             const { playerId, animation } = animData;

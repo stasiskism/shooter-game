@@ -14,6 +14,7 @@ import Lobby from './lobby.js'
 import Room from './room.js'
 import Spectator from './spectator.js'
 import Marketplace from './marketplace.js'
+import Deathmatch from './Deathmatch.js'
 
 
 const config = {
@@ -56,5 +57,6 @@ game.scene.add('lobby', Lobby)
 game.scene.add('room', Room)
 game.scene.add('spectator', Spectator)
 game.scene.add('marketplace', Marketplace)
+game.scene.add('Deathmatch', Deathmatch)
 game.scene.start('scene1')
 

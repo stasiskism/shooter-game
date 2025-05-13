@@ -221,8 +221,8 @@ class Lobby extends Phaser.Scene {
 
         socket.emit('checkRoom', {roomId});
 
-        socket.on('roomJoined', roomId => {
-            this.scene.start('room', { roomId: roomId });
+        socket.once('roomJoined', ({ roomId, gamemode, hostId }) => {
+            this.scene.start('room', { roomId, gamemode, hostId });
             this.scene.stop();
         });
 
@@ -243,7 +243,7 @@ class Lobby extends Phaser.Scene {
             if (!this.continueSearching) return;
             this.searchBox.setVisible(false);
             this.continueSearching = false;
-            this.scene.start('room', { roomId });
+            this.scene.start('room', { roomId, gamemode, hostId });
             this.scene.stop();
             cleanupEventListeners();
             hideSearchPrompt();
@@ -401,7 +401,7 @@ class Lobby extends Phaser.Scene {
         cancelButton.addEventListener('click', cleanup);
 
         socket.once('roomJoined', roomId => {
-            this.scene.start('room', { roomId });
+            this.scene.start('room', { roomId, gamemode, hostId });
             this.scene.stop();
         });
 
