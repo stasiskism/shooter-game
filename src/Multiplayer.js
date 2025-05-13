@@ -57,6 +57,10 @@ class Multiplayer extends Phaser.Scene {
         this.setupInputEvents();
         this.settingsButton = new SettingsButtonWithPanel(this, 1890, 90);
         this.events.on('settingsPanelOpened', this.onSettingsPanelOpened, this);
+        this.damageOverlay = this.add.rectangle(0, 0, 3000, 3000, 0xff0000)
+            .setOrigin(0)
+            .setAlpha(0)
+            .setDepth(9999);
     }
     
     onSettingsPanelOpened(panelVisible) {
@@ -355,6 +359,17 @@ class Multiplayer extends Phaser.Scene {
         clearInterval(this.shootingInterval)
     }
 
+    showDamageFlash() {
+    if (!this.damageOverlay) return;
+    this.damageOverlay.setAlpha(0.4);
+    this.tweens.add({
+        targets: this.damageOverlay,
+        alpha: 0,
+        duration: 200,
+        ease: 'Power2'
+    });
+    }
+
     setupPlayer(id, playerData) {
         // Cleanup existing player sprites if they exist
         if (this.frontendPlayers[id]) {
@@ -390,21 +405,46 @@ class Multiplayer extends Phaser.Scene {
 
     }
 
-    updatePlayerPosition(id, backendPlayer) {
-        this.frontendPlayers[id].x = backendPlayer.x;
-        this.frontendPlayers[id].y = backendPlayer.y;
-        this.playerHealth[id].container.setPosition(backendPlayer.x - 50, backendPlayer.y + 55);
-        const healthPercentage = backendPlayer.health / 100;
-        this.playerHealth[id].fg.scaleX = healthPercentage;
-        this.playerUsername[id].setPosition(backendPlayer.x, backendPlayer.y - 50);
-        this.playerUsername[id].setText(`${backendPlayer.username}`);
-        this.playerUsername[id].setOrigin(0.5).setScale(2);
+updatePlayerPosition(id, backendPlayer) {
+    const player = this.frontendPlayers[id];
+    const weapon = this.frontendWeapons[id];
 
-        if (id === socket.id) {
-            this.ammo = backendPlayer.bullets;
-            this.playerAmmo.setPosition(backendPlayer.x, backendPlayer.y + 75).setText(`Ammo: ${this.ammo}/${this.ammoFixed}`).setOrigin(0.5).setScale(2);
-        }
+    // Update position
+    player.x = backendPlayer.x;
+    player.y = backendPlayer.y;
+
+    // Update health bar position
+    this.playerHealth[id].container.setPosition(backendPlayer.x - 50, backendPlayer.y + 55);
+
+    // 🔥 Show damage flash if health dropped (only for local player)
+    if (id === socket.id && this.prevHealth !== undefined && backendPlayer.health < this.prevHealth) {
+        this.showDamageFlash();
     }
+    if (id === socket.id) {
+        this.prevHealth = backendPlayer.health; // store for next check
+    }
+
+    // Update health bar scale
+    const healthPercentage = backendPlayer.health / 100;
+    this.playerHealth[id].fg.scaleX = healthPercentage;
+
+    // Update username label
+    this.playerUsername[id].setPosition(backendPlayer.x, backendPlayer.y - 50);
+    this.playerUsername[id].setText(`${backendPlayer.username}`);
+    this.playerUsername[id].setOrigin(0.5).setScale(2);
+
+    // Update local ammo display
+    if (id === socket.id) {
+        this.ammo = backendPlayer.bullets;
+        this.playerAmmo
+            .setPosition(backendPlayer.x, backendPlayer.y + 75)
+            .setText(`Ammo: ${this.ammo}/${this.ammoFixed}`)
+            .setOrigin(0.5)
+            .setScale(2);
+    }
+
+    // Weapon rotation/positioning happens elsewhere (already implemented)
+}
 
     removePlayer(id) {
         if (id === socket.id && !this.gameStop) {
