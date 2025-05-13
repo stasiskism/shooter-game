@@ -410,11 +410,11 @@ class Marketplace extends Phaser.Scene {
             const scrollHeight = container.scrollHeight;
             if (scrollBottom >= scrollHeight - 50) {
               this.currentPage++;
-              this.fetchSkinListings(this.currentPage, false);
+              this.fetchSkinListings(this.currentPage, true);
             }
           };
   
-          container.addEventListener('scroll', this.scrollHandler);
+          //container.addEventListener('scroll', this.scrollHandler);
   
           const closeBtn = document.getElementById('close-skin-marketplace');
           if (closeBtn) {
@@ -621,9 +621,28 @@ class Marketplace extends Phaser.Scene {
     const closeBtn = document.getElementById('close-skin-marketplace');
     const listButton = document.getElementById('list-skin-button');
     const listingsDiv = document.getElementById('skin-listings');
+    const searchInput = document.getElementById('skin-search-input');
+    let searchTimeout = null;
   
     this.currentPage = 1;
     this.skinMarketplaceVisible = false;
+  
+
+    searchInput.addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    const query = e.target.value;
+    searchTimeout = setTimeout(() => {
+      this.fetchSkinListings(1, true, query); // Reset to page 1 on search
+    }, 300);
+    
+  });
+
+    searchInput.addEventListener('keydown', (e) => {
+    const allowedKeys = ['w', 'a', 's', 'd', 'W', 'A', 'S', 'D'];
+    if (allowedKeys.includes(e.key)) {
+      e.stopPropagation(); // Prevent the input from stopping propagation
+    }
+  });
   
     closeBtn.addEventListener('click', () => {
       skinMarketplaceContainer.style.display = 'none';
@@ -658,11 +677,11 @@ class Marketplace extends Phaser.Scene {
   
           if (scrollBottom >= scrollHeight - 50) {
             this.currentPage++;
-            this.fetchSkinListings(this.currentPage, false);
+            this.fetchSkinListings(this.currentPage, true);
           }
         };
   
-        skinMarketplaceContainer.addEventListener('scroll', this.scrollHandler);
+        //skinMarketplaceContainer.addEventListener('scroll', this.scrollHandler);
       }
     });
   }
@@ -740,85 +759,132 @@ class Marketplace extends Phaser.Scene {
   }
   
   
-  
-  
-  fetchSkinListings(page = 1, replace = false) {
-    fetch(`/get-skin-listings?page=${page}&limit=10`)
-      .then(res => res.json())
-      .then(listings => {
-        const listingsDiv = document.getElementById('skin-listings');
-        if (replace) listingsDiv.innerHTML = '';
-  
-        if (listings.length === 0 && page === 1) {
-          listingsDiv.innerHTML = '<p>No listings available.</p>';
-          return;
+fetchSkinListings(page = 1, replace = true, searchQuery = '') {
+  fetch(`/get-skin-listings`) // no page/limit
+    .then(res => res.json())
+    .then(res => {
+      const listings = res.listings || res;
+
+      const listingsDiv = document.getElementById('skin-listings');
+      const paginationDiv = document.getElementById('pagination-controls');
+      listingsDiv.innerHTML = '';
+      paginationDiv.innerHTML = '';
+
+      // 🔍 Filter listings
+      let filteredListings = listings;
+      if (searchQuery && typeof searchQuery === 'string') {
+        const query = searchQuery.toLowerCase();
+        filteredListings = listings.filter(item =>
+          item.skin_name.toLowerCase().includes(query)
+        );
+      }
+
+      if (filteredListings.length === 0) {
+        listingsDiv.innerHTML = '<p>No listings available.</p>';
+        return;
+      }
+
+      // ✂️ Apply pagination manually
+      const itemsPerPage = 3;
+      const totalPages = Math.ceil(filteredListings.length / itemsPerPage);
+      if (page < 1) page = 1;
+      if (page > totalPages) page = totalPages;
+
+      const start = (page - 1) * itemsPerPage;
+      const end = start + itemsPerPage;
+      const pageItems = filteredListings.slice(start, end);
+
+      // 🖼️ Render current page
+      pageItems.forEach(item => {
+        const isOwner = item.seller_name === this.username;
+
+        const listingElement = document.createElement('div');
+        listingElement.className = 'marketplace-entry';
+        listingElement.style = 'border: 1px solid #ccc; border-radius: 8px; padding: 10px; background-color: #1e1e1e; margin-bottom: 15px;';
+        listingElement.innerHTML = `
+          <p><strong>Skin:</strong> ${item.skin_name}</p>
+          <p><strong>Rarity:</strong> ${item.rarity}</p>
+          <p><strong>Price:</strong> ${item.price} Coins</p>
+          <p><strong>Seller:</strong> ${item.seller_name}</p>
+          <img src="/skins/${item.image_url}.png" width="100" height="100">
+        `;
+
+        if (!isOwner) {
+          const buyBtn = document.createElement('button');
+          buyBtn.textContent = 'Buy';
+          buyBtn.className = 'prompt-button';
+          buyBtn.onclick = () => this.buySkinListing(item.listing_id);
+          listingElement.appendChild(buyBtn);
+        } else {
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.min = 1;
+          input.value = item.price;
+          input.style = 'width: 60px; margin-right: 5px';
+
+          const updateBtn = document.createElement('button');
+          updateBtn.textContent = 'Update Price';
+          updateBtn.className = 'prompt-button';
+          updateBtn.onclick = () => this.updateSkinListing(item.listing_id, parseInt(input.value));
+
+          const cancelBtn = document.createElement('button');
+          cancelBtn.textContent = 'Cancel Listing';
+          cancelBtn.className = 'prompt-button';
+          cancelBtn.onclick = () => this.cancelSkinListing(item.listing_id);
+
+          listingElement.appendChild(document.createElement('br'));
+          listingElement.appendChild(input);
+          listingElement.appendChild(updateBtn);
+          listingElement.appendChild(cancelBtn);
         }
-  
-        listings.forEach(item => {
-          const isOwner = item.seller_name === this.username;
-  
-          const listingElement = document.createElement('div');
-          listingElement.style.border = '1px solid #ccc';
-          listingElement.style.borderRadius = '8px';
-          listingElement.style.margin = '10px';
-          listingElement.style.padding = '10px';
-          listingElement.style.backgroundColor = '#1e1e1e';
-  
-          listingElement.innerHTML = `
-            <p><strong>Skin:</strong> ${item.skin_name}</p>
-            <p><strong>Rarity:</strong> ${item.rarity}</p>
-            <p><strong>Price:</strong> ${item.price} Coins</p>
-            <p><strong>Seller:</strong> ${item.seller_name}</p>
-            <img src="/skins/${item.image_url}.png" alt="${item.skin_name}" width="100" height="100" loading="lazy">
-          `;
-  
-          if (!isOwner) {
-            const buyButton = document.createElement('button');
-            buyButton.textContent = 'Buy';
-            buyButton.className = 'prompt-button';
-            buyButton.addEventListener('click', () => {
-              this.buySkinListing(item.listing_id);
-            });
-            listingElement.appendChild(buyButton);
-          } else {
-            const priceInput = document.createElement('input');
-            priceInput.type = 'number';
-            priceInput.min = 1;
-            priceInput.value = item.price;
-            priceInput.style.width = '60px';
-            priceInput.style.marginRight = '5px';
-  
-            const updateBtn = document.createElement('button');
-            updateBtn.textContent = 'Update Price';
-            updateBtn.className = 'prompt-button';
-            updateBtn.addEventListener('click', () => {
-              const newPrice = parseInt(priceInput.value);
-              if (newPrice < 1) return alert('Invalid price.');
-              this.updateSkinListing(item.listing_id, newPrice);
-            });
-  
-            const cancelBtn = document.createElement('button');
-            cancelBtn.textContent = 'Cancel Listing';
-            cancelBtn.className = 'prompt-button';
-            cancelBtn.addEventListener('click', () => {
-              this.cancelSkinListing(item.listing_id);
-            });
-  
-            listingElement.appendChild(document.createElement('br'));
-            listingElement.appendChild(priceInput);
-            listingElement.appendChild(updateBtn);
-            listingElement.appendChild(cancelBtn);
-          }
-  
-          listingsDiv.appendChild(listingElement);
-        });
-      })
-      .catch(err => {
-        console.error('Failed to fetch listings:', err);
-        const listingsDiv = document.getElementById('skin-listings');
-        listingsDiv.innerHTML = '<p style="color:red;">Failed to load listings. Please try again later.</p>';
+
+        listingsDiv.appendChild(listingElement);
       });
-  }
+
+      // Pagination
+      if (page > 1) {
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'prompt-button';
+        prevBtn.textContent = 'Previous';
+        prevBtn.onclick = () => {
+          this.currentPage = page - 1;
+          this.fetchSkinListings(this.currentPage, true, searchQuery);
+        };
+        paginationDiv.appendChild(prevBtn);
+      }
+
+      for (let i = 1; i <= totalPages; i++) {
+        const pageBtn = document.createElement('button');
+        pageBtn.className = 'prompt-button';
+        pageBtn.textContent = i;
+        if (i === page) {
+          pageBtn.disabled = true;
+          pageBtn.style.backgroundColor = '#444';
+        }
+        pageBtn.onclick = () => {
+          this.currentPage = i;
+          this.fetchSkinListings(i, true, searchQuery);
+        };
+        paginationDiv.appendChild(pageBtn);
+      }
+
+      if (page < totalPages) {
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'prompt-button';
+        nextBtn.textContent = 'Next';
+        nextBtn.onclick = () => {
+          this.currentPage = page + 1;
+          this.fetchSkinListings(this.currentPage, true, searchQuery);
+        };
+        paginationDiv.appendChild(nextBtn);
+      }
+    })
+    .catch(err => {
+      console.error('Failed to fetch listings:', err);
+      document.getElementById('skin-listings').innerHTML = '<p style="color:red;">Error loading listings.</p>';
+    });
+}
+
   
   
   
