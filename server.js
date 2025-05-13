@@ -1128,40 +1128,22 @@ app.get('/get-weapons', async (req, res) => {
   
 
 app.get('/get-skin-listings', async (req, res) => {
-  const page = Math.max(parseInt(req.query.page) || 1, 1);
-  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
-  const offset = (page - 1) * limit;
-
   try {
     const client = await sql.connect();
 
-    // Count listings created in the last 7 days
-    const countResult = await client.query(`
-      SELECT COUNT(*) AS total
-      FROM skin_marketplace_listings
-      WHERE created_at >= NOW() - INTERVAL '7 days'
-    `);
-    const totalListings = parseInt(countResult.rows[0].total);
-    const totalPages = Math.ceil(totalListings / limit);
-
-    // Debug
-    console.log(`Fetching page ${page} | LIMIT ${limit} | OFFSET ${offset} | Total listings: ${totalListings}`);
-
-    // Paginated query
+    // Get ALL listings from the last 7 days (no pagination)
     const listingsResult = await client.query(`
       SELECT l.listing_id, l.skin_id, l.price, ws.skin_name, ws.image_url, ws.rarity, l.seller_name
       FROM skin_marketplace_listings l
       JOIN weapon_skins ws ON l.skin_id = ws.skin_id
       WHERE l.created_at >= NOW() - INTERVAL '7 days'
       ORDER BY l.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
     `);
 
     client.release();
 
     res.json({
-      listings: listingsResult.rows,
-      totalPages
+      listings: listingsResult.rows
     });
 
   } catch (error) {

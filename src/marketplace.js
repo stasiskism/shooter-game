@@ -626,6 +626,7 @@ class Marketplace extends Phaser.Scene {
   
     this.currentPage = 1;
     this.skinMarketplaceVisible = false;
+  
 
     searchInput.addEventListener('input', (e) => {
     clearTimeout(searchTimeout);
@@ -633,6 +634,14 @@ class Marketplace extends Phaser.Scene {
     searchTimeout = setTimeout(() => {
       this.fetchSkinListings(1, true, query); // Reset to page 1 on search
     }, 300);
+    
+  });
+
+    searchInput.addEventListener('keydown', (e) => {
+    const allowedKeys = ['w', 'a', 's', 'd', 'W', 'A', 'S', 'D'];
+    if (allowedKeys.includes(e.key)) {
+      e.stopPropagation(); // Prevent the input from stopping propagation
+    }
   });
   
     closeBtn.addEventListener('click', () => {
@@ -751,28 +760,17 @@ class Marketplace extends Phaser.Scene {
   
   
 fetchSkinListings(page = 1, replace = true, searchQuery = '') {
-  fetch(`/get-skin-listings?page=${page}&limit=3`)
+  fetch(`/get-skin-listings`) // no page/limit
     .then(res => res.json())
     .then(res => {
       const listings = res.listings || res;
-      let totalPages = 1;
-      if ('totalPages' in res) {
-        totalPages = res.totalPages;
-      } else if (Array.isArray(res) && res.length > 0) {
-        totalPages = Math.ceil(res.length / 3);
-      }
-
-      // Clamp page within bounds
-      if (page < 1) page = 1;
-      if (page > totalPages) page = totalPages;
 
       const listingsDiv = document.getElementById('skin-listings');
       const paginationDiv = document.getElementById('pagination-controls');
-
-      if (replace) listingsDiv.innerHTML = '';
+      listingsDiv.innerHTML = '';
       paginationDiv.innerHTML = '';
 
-      // 🔍 Filter by search input
+      // 🔍 Filter listings
       let filteredListings = listings;
       if (searchQuery && typeof searchQuery === 'string') {
         const query = searchQuery.toLowerCase();
@@ -781,13 +779,23 @@ fetchSkinListings(page = 1, replace = true, searchQuery = '') {
         );
       }
 
-      if (filteredListings.length === 0 && page === 1) {
+      if (filteredListings.length === 0) {
         listingsDiv.innerHTML = '<p>No listings available.</p>';
         return;
       }
 
-      // Render listings
-      filteredListings.forEach(item => {
+      // ✂️ Apply pagination manually
+      const itemsPerPage = 3;
+      const totalPages = Math.ceil(filteredListings.length / itemsPerPage);
+      if (page < 1) page = 1;
+      if (page > totalPages) page = totalPages;
+
+      const start = (page - 1) * itemsPerPage;
+      const end = start + itemsPerPage;
+      const pageItems = filteredListings.slice(start, end);
+
+      // 🖼️ Render current page
+      pageItems.forEach(item => {
         const isOwner = item.seller_name === this.username;
 
         const listingElement = document.createElement('div');
@@ -833,7 +841,7 @@ fetchSkinListings(page = 1, replace = true, searchQuery = '') {
         listingsDiv.appendChild(listingElement);
       });
 
-      // Pagination buttons
+      // Pagination
       if (page > 1) {
         const prevBtn = document.createElement('button');
         prevBtn.className = 'prompt-button';
