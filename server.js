@@ -570,8 +570,12 @@ io.on('connection', (socket) => {
     socket.on('playerMove', (data) => {
         const movementSpeed = 2
         let mapSize = 250
+        const multiplayerId = backendPlayers[socket.id].multiplayerId;
+        const gamemode = rooms[multiplayerId]?.gamemode;
         if (backendPlayers[socket.id]) {
             const playerId = socket.id;
+            const player = backendPlayers[playerId];
+            if (!player || player._isDead) return;
             let roomId = null;
             let maxPlayers = null
             for (const id in rooms) {
@@ -589,24 +593,73 @@ io.on('connection', (socket) => {
             if (data === 'a') {
                 backendPlayers[socket.id].x -= movementSpeed
                 if (backendPlayers[socket.id].x < 0) {
-                    delete backendPlayers[socket.id]
+                    if (gamemode === 'deathmatch') {
+                        const killerUsername = 'the void';
+                        player._isDead = true;
+                        io.to(multiplayerId).emit('removeKilledPlayer', {
+                            killerId: null,
+                            victimId: socket.id,
+                        });
+                        respawnPlayer(socket, killerUsername);
+                    } else {
+                        delete backendPlayers[socket.id];
+                    }
+
+                    return;
                 }
+
             } else if (data === 'd') {
                 backendPlayers[socket.id].x += movementSpeed
                 if (backendPlayers[socket.id].x > 1920 + mapSize) {
-                    delete backendPlayers[socket.id]
+                    if (gamemode === 'deathmatch') {
+                        const killerUsername = 'the void';
+                        player._isDead = true;
+                        io.to(multiplayerId).emit('removeKilledPlayer', {
+                            killerId: null,
+                            victimId: socket.id,
+                        });
+                        respawnPlayer(socket, killerUsername);
+                    } else {
+                        delete backendPlayers[socket.id];
+                    }
+
+                    return;
                 }
             }
 
             if (data === 'w') {
                 backendPlayers[socket.id].y -= movementSpeed
                 if (backendPlayers[socket.id].y < 0) {
-                    delete backendPlayers[socket.id]
+                    if (gamemode === 'deathmatch') {
+                        const killerUsername = 'the void';
+                        player._isDead = true;
+                        io.to(multiplayerId).emit('removeKilledPlayer', {
+                            killerId: null,
+                            victimId: socket.id,
+                        });
+                        respawnPlayer(socket, killerUsername);
+                    } else {
+                        delete backendPlayers[socket.id];
+                    }
+
+                    return;
                 }
             } else if (data === 's') {
                 backendPlayers[socket.id].y += movementSpeed
                 if (backendPlayers[socket.id].y > 1080 + mapSize) {
-                    delete backendPlayers[socket.id]
+                    if (gamemode === 'deathmatch') {
+                        const killerUsername = 'the void';
+                        player._isDead = true;
+                        io.to(multiplayerId).emit('removeKilledPlayer', {
+                            killerId: null,
+                            victimId: socket.id,
+                        });
+                        respawnPlayer(socket, killerUsername);
+                    } else {
+                        delete backendPlayers[socket.id];
+                    }
+
+                    return;
                 }
             }
         }

@@ -52,6 +52,10 @@ class Deathmatch extends Phaser.Scene {
     }
 
     create() {
+        this.gameStop = false;
+        this.isRespawning = false;
+        this.isPanelVisible = false;
+        this.empty = false;
         this.frontendPlayers = {}
         this.setupScene();
         this.setupMap();
@@ -59,6 +63,22 @@ class Deathmatch extends Phaser.Scene {
         this.settingsButton = new SettingsButtonWithPanel(this, 1890, 90);
         this.events.on('settingsPanelOpened', this.onSettingsPanelOpened, this);
         this.killFeed = this.add.group();
+        this.damageOverlay = this.add.rectangle(0, 0, 3000, 3000, 0xff0000)
+            .setOrigin(0)
+            .setAlpha(0)
+            .setDepth(9999);
+        this.reloadIndicator = this.add.graphics();
+        this.reloadIndicator.setDepth(999);
+        this.reloadIndicator.setVisible(false);
+        this.leaderboardText = this.add.text(20, 100, '', {
+            fontFamily: 'Arial',
+            fontSize: '24px',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setScrollFactor(0).setDepth(999);
+
+        this.killCounts = {};
 
     }
     
@@ -98,23 +118,6 @@ class Deathmatch extends Phaser.Scene {
             const reloadFrames = endReload - startReload + 1;
             const reloadFrameRate = reloadFrames / (reloadTime / 1000);
     
-            /*if (!this.anims.exists(`singleShot_${weapon}`)) {
-                this.anims.create({
-                    key: `singleShot_${weapon}`,
-                    frames: this.anims.generateFrameNumbers(`shoot${weapon}`, { start: startShoot, end: endShoot }),
-                    frameRate: 60,
-                    repeat: 0
-                });
-            }
-    
-            if (!this.anims.exists(`reloads_${weapon}`)) {
-                this.anims.create({
-                    key: `reloads_${weapon}`,
-                    frames: this.anims.generateFrameNumbers(`reload${weapon}`, { start: startReload, end: endReload }),
-                    frameRate: reloadFrameRate,
-                    repeat: 0
-                });
-            }*/
         }
     }
     
@@ -209,11 +212,31 @@ class Deathmatch extends Phaser.Scene {
             canShoot = false;
             const reloadTime = this.weaponDetails.reload;
             canReload = false;
+            this.reloadIndicator.setVisible(true);
+            const startTime = this.time.now;
+
+            this.reloadTimer = this.time.addEvent({
+                delay: 16, // ~60 FPS
+                loop: true,
+                callback: () => {
+                    const elapsed = this.time.now - startTime;
+                    const progress = Phaser.Math.Clamp(elapsed / reloadTime, 0, 1);
+                    this.drawReloadCircle(progress);
+
+                    if (progress >= 1) {
+                        this.reloadTimer.remove();
+                        this.reloadIndicator.clear();
+                        this.reloadIndicator.setVisible(false);
+                        canReload = true;
+                        canShoot = true;
+                    }
+                }
+            });
             socket.emit('reload', socket.id);
-            setTimeout(() => {
-                canReload = true;
-                canShoot = true;
-            }, reloadTime);
+            // setTimeout(() => {
+            //     canReload = true;
+            //     canShoot = true;
+            // }, reloadTime);
         });
 
         this.input.keyboard.on('keydown-G', () => {
@@ -301,28 +324,39 @@ class Deathmatch extends Phaser.Scene {
         });
 
         socket.on('removeKilledPlayer', ({ victimId, killerId }) => {
-            const killerName = this.playerUsername[killerId]?.text;
+            const killerName = killerId ? this.playerUsername[killerId]?.text : 'The Void';
             const victimName = this.playerUsername[victimId]?.text;
 
-            const killText = this.add.text(this.cameras.main.width - 200, 100 + this.killFeed.getLength() * 30,
+            const feedX = this.cameras.main.width - 40;
+            const feedY = 100 + this.killFeed.getLength() * 40;
+
+            const killText = this.add.text(feedX - 10, feedY,
                 `${killerName} → ${victimName}`, {
-                    fontFamily: 'Arial',
-                    fontSize: 20,
-                    color: '#ff0000'
+                    fontFamily: 'Arial Black',
+                    fontSize: '28px',
+                    color: '#ffffff',
+                    stroke: '#000000',
+                    strokeThickness: 4,
+                    backgroundColor: 'transparent'
                 }).setOrigin(1, 0).setScrollFactor(0).setDepth(999);
 
             this.killFeed.add(killText);
-            this.time.delayedCall(3000, () => killText.destroy());
+            this.time.delayedCall(4000, () => killText.destroy());
+
+            if (killerId) {
+                if (!this.killCounts[killerName]) {
+                    this.killCounts[killerName] = 0;
+                }
+                this.killCounts[killerName]++;
+                this.updateLeaderboard();
+            }
 
             this.removePlayer(victimId);
         });
 
 
+
         socket.on('startRespawnCountdown', ({ killerUsername }) => {
-            console.log('[RESPAWN UI] Starting countdown. Killer:', killerUsername);
-    console.log('[RESPAWN UI] Current socket ID:', socket.id);
-    console.log('[RESPAWN UI] frontendPlayers keys:', Object.keys(this.frontendPlayers));
-    console.log('[RESPAWN UI] frontendWeapons keys:', Object.keys(this.frontendWeapons));
             if (this.isRespawning || this.gameStop) return;
             this.isRespawning = true;
             this.removePlayer(socket.id)
@@ -341,7 +375,7 @@ class Deathmatch extends Phaser.Scene {
                 .setOrigin(0)
                 .setAlpha(0.6)
                 .setDepth(998)
-            // Death text
+
             const killedByText = this.add.text(width / 2, height / 2 - 100, `You were killed by ${killerUsername}`, {
                 fontFamily: 'Arial',
                 fontSize: 32,
@@ -364,22 +398,24 @@ class Deathmatch extends Phaser.Scene {
                     countdownText.setText(`Respawning in ${timeLeft}...`);
 
                     if (timeLeft === 0) {
-                        // Clean up UI
                         countdownText.destroy();
                         killedByText.destroy();
                         this.deathOverlay.destroy();
 
-                        // Re-enable input
                         this.input.keyboard.enabled = true;
                         this.input.mouse.enabled = true;
 
-                        // Show HUD again
                         if (this.playerAmmo) this.playerAmmo.setVisible(true);
                         if (this.playerHealth[socket.id]?.container) {
                             this.playerHealth[socket.id].container.setVisible(true);
                         }
 
-                        this.isRespawning = false; // allow future deaths to work
+                        this.isRespawning = false;
+                        this.w.reset();
+                        this.a.reset();
+                        this.s.reset();
+                        this.d.reset();
+
                     }
                 }
             });
@@ -388,7 +424,6 @@ class Deathmatch extends Phaser.Scene {
 
 
         socket.on('gameWon', (winnerUsername) => {
-            console.log("laimejo cia")
             this.gameWon(winnerUsername);
         });
     }
@@ -414,6 +449,17 @@ class Deathmatch extends Phaser.Scene {
 
     stopShooting() {
         clearInterval(this.shootingInterval)
+    }
+
+    showDamageFlash() {
+        if (!this.damageOverlay) return;
+        this.damageOverlay.setAlpha(0.4);
+        this.tweens.add({
+            targets: this.damageOverlay,
+            alpha: 0,
+            duration: 200,
+            ease: 'Power2'
+        });
     }
 
     setupPlayer(id, playerData) {
@@ -453,23 +499,39 @@ class Deathmatch extends Phaser.Scene {
     }
 
     updatePlayerPosition(id, backendPlayer) {
-        this.frontendPlayers[id].x = backendPlayer.x;
-        this.frontendPlayers[id].y = backendPlayer.y;
+        const player = this.frontendPlayers[id];
+        const weapon = this.frontendWeapons[id];
+
+        player.x = backendPlayer.x;
+        player.y = backendPlayer.y;
+
         this.playerHealth[id].container.setPosition(backendPlayer.x - 50, backendPlayer.y + 55);
-        const healthPercentage = Math.max(0, Math.min(1, backendPlayer.health / 100));
+
+        if (id === socket.id && this.prevHealth !== undefined && backendPlayer.health < this.prevHealth) {
+            this.showDamageFlash();
+        }
+        if (id === socket.id) {
+            this.prevHealth = backendPlayer.health;
+        }
+
+        const healthPercentage = backendPlayer.health / 100;
         this.playerHealth[id].fg.scaleX = healthPercentage;
+
         this.playerUsername[id].setPosition(backendPlayer.x, backendPlayer.y - 50);
         this.playerUsername[id].setText(`${backendPlayer.username}`);
         this.playerUsername[id].setOrigin(0.5).setScale(2);
 
         if (id === socket.id) {
             this.ammo = backendPlayer.bullets;
-            this.playerAmmo.setPosition(backendPlayer.x, backendPlayer.y + 75).setText(`Ammo: ${this.ammo}/${this.ammoFixed}`).setOrigin(0.5).setScale(2);
+            this.playerAmmo
+                .setPosition(backendPlayer.x, backendPlayer.y + 75)
+                .setText(`Ammo: ${this.ammo}/${this.ammoFixed}`)
+                .setOrigin(0.5)
+                .setScale(2);
         }
     }
 
     removePlayer(id) {
-        console.log('[REMOVE PLAYER]', id);
         
         if (id === socket.id && this.playerAmmo) {
             this.playerAmmo.destroy();
@@ -559,6 +621,7 @@ class Deathmatch extends Phaser.Scene {
 
     updatePlayerMovement() {
         if (!this.frontendPlayers[socket.id]) return;
+        if (this.isRespawning || this.gameStop) return;
         const player = this.frontendPlayers[socket.id];
         const weapon = this.frontendWeapons[socket.id];
         let moving = false;
@@ -701,7 +764,7 @@ class Deathmatch extends Phaser.Scene {
         for (const id in this.frontendPlayers) {
             this.removePlayer(id);
         }
-        this.scene.stop();
+        this.scene.stop('Deathmatch');
         this.scene.start('lobby');
     });
 }
@@ -877,6 +940,30 @@ class Deathmatch extends Phaser.Scene {
     
         return skinMap[skinId] || weaponDefaults[weaponId];
     }
+
+    drawReloadCircle(progress) {
+        const centerX = this.crosshair.x;
+        const centerY = this.crosshair.y;
+        const radius = 30;
+
+        this.reloadIndicator.clear();
+        this.reloadIndicator.lineStyle(4, 0xffffff, 1);
+        this.reloadIndicator.beginPath();
+        this.reloadIndicator.arc(centerX, centerY, radius, Phaser.Math.DegToRad(270), Phaser.Math.DegToRad(270 + 360 * progress), false);
+        this.reloadIndicator.strokePath();
+    }
+
+    updateLeaderboard() {
+        const entries = Object.entries(this.killCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
+
+        const leaderboard = entries.map(([name, kills], index) =>
+            `${index + 1}. ${name}: ${kills} kill${kills === 1 ? '' : 's'}`).join('\n');
+
+        this.leaderboardText.setText(`LEADERBOARD\n${leaderboard}`);
+    }
+
 
 }
 

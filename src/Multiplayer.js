@@ -405,38 +405,38 @@ class Multiplayer extends Phaser.Scene {
 
     }
 
-updatePlayerPosition(id, backendPlayer) {
-    const player = this.frontendPlayers[id];
-    const weapon = this.frontendWeapons[id];
+    updatePlayerPosition(id, backendPlayer) {
+        const player = this.frontendPlayers[id];
+        const weapon = this.frontendWeapons[id];
 
-    player.x = backendPlayer.x;
-    player.y = backendPlayer.y;
+        player.x = backendPlayer.x;
+        player.y = backendPlayer.y;
 
-    this.playerHealth[id].container.setPosition(backendPlayer.x - 50, backendPlayer.y + 55);
+        this.playerHealth[id].container.setPosition(backendPlayer.x - 50, backendPlayer.y + 55);
 
-    if (id === socket.id && this.prevHealth !== undefined && backendPlayer.health < this.prevHealth) {
-        this.showDamageFlash();
+        if (id === socket.id && this.prevHealth !== undefined && backendPlayer.health < this.prevHealth) {
+            this.showDamageFlash();
+        }
+        if (id === socket.id) {
+            this.prevHealth = backendPlayer.health;
+        }
+
+        const healthPercentage = backendPlayer.health / 100;
+        this.playerHealth[id].fg.scaleX = healthPercentage;
+
+        this.playerUsername[id].setPosition(backendPlayer.x, backendPlayer.y - 50);
+        this.playerUsername[id].setText(`${backendPlayer.username}`);
+        this.playerUsername[id].setOrigin(0.5).setScale(2);
+
+        if (id === socket.id) {
+            this.ammo = backendPlayer.bullets;
+            this.playerAmmo
+                .setPosition(backendPlayer.x, backendPlayer.y + 75)
+                .setText(`Ammo: ${this.ammo}/${this.ammoFixed}`)
+                .setOrigin(0.5)
+                .setScale(2);
+        }
     }
-    if (id === socket.id) {
-        this.prevHealth = backendPlayer.health;
-    }
-
-    const healthPercentage = backendPlayer.health / 100;
-    this.playerHealth[id].fg.scaleX = healthPercentage;
-
-    this.playerUsername[id].setPosition(backendPlayer.x, backendPlayer.y - 50);
-    this.playerUsername[id].setText(`${backendPlayer.username}`);
-    this.playerUsername[id].setOrigin(0.5).setScale(2);
-
-    if (id === socket.id) {
-        this.ammo = backendPlayer.bullets;
-        this.playerAmmo
-            .setPosition(backendPlayer.x, backendPlayer.y + 75)
-            .setText(`Ammo: ${this.ammo}/${this.ammoFixed}`)
-            .setOrigin(0.5)
-            .setScale(2);
-    }
-}
 
     removePlayer(id) {
         if (id === socket.id && !this.gameStop) {
