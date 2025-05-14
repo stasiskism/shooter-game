@@ -438,27 +438,6 @@ class Multiplayer extends Phaser.Scene {
                 .setScale(2);
         }
 
-
-    // Update health bar scale
-    const healthPercentage = backendPlayer.health / 100;
-    this.playerHealth[id].fg.scaleX = healthPercentage;
-
-    // Update username label
-    this.playerUsername[id].setPosition(backendPlayer.x, backendPlayer.y - 50);
-    this.playerUsername[id].setText(`${backendPlayer.username}`);
-    this.playerUsername[id].setOrigin(0.5).setScale(2);
-
-    // Update local ammo display
-    if (id === socket.id) {
-        this.ammo = backendPlayer.bullets;
-        this.playerAmmo
-            .setPosition(backendPlayer.x, backendPlayer.y + 75)
-            .setText(`Ammo: ${this.ammo}/${this.ammoFixed}`)
-            .setOrigin(0.5)
-            .setScale(2);
-    }
-
-    // Weapon rotation/positioning happens elsewhere (already implemented)
 }
 
     removePlayer(id) {
