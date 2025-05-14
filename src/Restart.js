@@ -19,6 +19,14 @@ class Restart extends Phaser.Scene {
     create () {
         this.input.mouse.releasePointerLock();
         socket.emit('singleplayer', socket.id, this.score)
+        socket.on('achievementCompleted', ({ achievementId, title }) => {
+            showTopNotification(`Achievement completed: ${title}! Reward is ready to be claimed.`);
+        });
+
+
+        socket.on('challengeCompleted', ({ challengeId, title }) => {
+            showTopNotification(`Challenge completed: ${title}! Reward is ready to be claimed.`);
+        });
         socket.emit('updateProgress', {
             type: 'defeat_enemy',
             amount: this.score

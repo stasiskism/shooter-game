@@ -61,6 +61,16 @@ class Multiplayer extends Phaser.Scene {
             .setOrigin(0)
             .setAlpha(0)
             .setDepth(9999);
+        this.reloadIndicator = this.add.graphics();
+        this.reloadIndicator.setDepth(999);
+        this.reloadIndicator.setVisible(false);
+        this.leaderboardText = this.add.text(20, 100, '', {
+            fontFamily: 'Arial',
+            fontSize: '24px',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setScrollFactor(0).setDepth(999);
     }
     
     onSettingsPanelOpened(panelVisible) {
@@ -210,11 +220,27 @@ class Multiplayer extends Phaser.Scene {
             canShoot = false;
             const reloadTime = this.weaponDetails.reload;
             canReload = false;
+            this.reloadIndicator.setVisible(true);
+            const startTime = this.time.now;
+
+            this.reloadTimer = this.time.addEvent({
+                delay: 16, // ~60 FPS
+                loop: true,
+                callback: () => {
+                    const elapsed = this.time.now - startTime;
+                    const progress = Phaser.Math.Clamp(elapsed / reloadTime, 0, 1);
+                    this.drawReloadCircle(progress);
+
+                    if (progress >= 1) {
+                        this.reloadTimer.remove();
+                        this.reloadIndicator.clear();
+                        this.reloadIndicator.setVisible(false);
+                        canReload = true;
+                        canShoot = true;
+                    }
+                }
+            });
             socket.emit('reload', socket.id);
-            setTimeout(() => {
-                canReload = true;
-                canShoot = true;
-            }, reloadTime);
         });
 
         this.input.keyboard.on('keydown-G', () => {
@@ -257,17 +283,17 @@ class Multiplayer extends Phaser.Scene {
                 alivePlayers[id] = true;
             }
 
-            // const alivePlayerCount = Object.keys(alivePlayers).length;
-            // if (alivePlayerCount === 1) {
-            //     this.gameStop = true
-            //     const id = Object.keys(alivePlayers)[0]
-            //     this.gameWon(backendPlayers[id].username)
-            //     this.playerAmmo.destroy()
-            //     this.playerHealth[id].container.destroy()
-            //     this.playerUsername[id].destroy()
-            //     this.stopShooting()
-            //     socket.off('updatePlayers')
-            // }
+            const alivePlayerCount = Object.keys(alivePlayers).length;
+            if (alivePlayerCount === 1) {
+                this.gameStop = true
+                const id = Object.keys(alivePlayers)[0]
+                this.gameWon(backendPlayers[id].username)
+                this.playerAmmo.destroy()
+                this.playerHealth[id].container.destroy()
+                this.playerUsername[id].destroy()
+                this.stopShooting()
+                socket.off('updatePlayers')
+            }
 
             for (const id in this.frontendPlayers) {
                 if (!alivePlayers[id]) {
@@ -325,6 +351,17 @@ class Multiplayer extends Phaser.Scene {
                 }
             }
         })
+
+        socket.on('achievementCompleted', ({ achievementId, title }) => {
+            console.log('Received achievementCompleted:', achievementId, title);
+            window.showTopNotification(`Achievement completed: ${title}! Reward is ready to be claimed.`);
+        });
+
+
+        socket.on('challengeCompleted', ({ challengeId, title }) => {
+            console.log('Received challengeCompleted:', challengeId, title);
+            window.showTopNotification(`Challenge completed: ${title}! Reward is ready to be claimed.`);
+        });
 
         /*socket.on('updateGunAnimation', (playerId, animation, weapon) => {
             if (this.frontendWeapons[playerId]) {

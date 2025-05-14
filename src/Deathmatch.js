@@ -233,10 +233,6 @@ class Deathmatch extends Phaser.Scene {
                 }
             });
             socket.emit('reload', socket.id);
-            // setTimeout(() => {
-            //     canReload = true;
-            //     canShoot = true;
-            // }, reloadTime);
         });
 
         this.input.keyboard.on('keydown-G', () => {
@@ -419,6 +415,16 @@ class Deathmatch extends Phaser.Scene {
                     }
                 }
             });
+        });
+
+        socket.on('achievementCompleted', ({ achievementId, title }) => {
+            window.showTopNotification(`Achievement completed: ${title}! Reward is ready to be claimed.`);
+        });
+
+
+
+        socket.on('challengeCompleted', ({ challengeId, title }) => {
+            window.showTopNotification(`Challenge completed: ${title}! Reward is ready to be claimed.`);
         });
 
 

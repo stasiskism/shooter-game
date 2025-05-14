@@ -1099,18 +1099,37 @@ io.on('connection', (socket) => {
             client.release();
             return;
           }
-      
+          const completedChallenge = await client.query(`
+            SELECT 1 FROM user_challenges
+            WHERE user_id = $1 AND challenge_id = $2
+              AND progress >= (SELECT target FROM challenges WHERE challenge_id = $2)
+              AND completed = FALSE
+          `, [userId, challengeId]);
+
+          if (completedChallenge.rowCount > 0) {
+            await client.query(`
+              UPDATE user_challenges
+              SET completed = TRUE
+              WHERE user_id = $1 AND challenge_id = $2
+            `, [userId, challengeId]);
+
+            io.to(activeSessions[username]).emit('challengeCompleted', {
+              challengeId
+            });
+          }
+
           await client.query(`
             UPDATE user_profile
             SET coins = coins + $1, xp = xp + $2
             WHERE user_id = $3
           `, [challenge.reward_coins, challenge.reward_xp, userId]);
-      
+
           await client.query(`
             UPDATE user_challenges
             SET is_claimed = TRUE
             WHERE user_id = $1 AND challenge_id = $2
           `, [userId, challengeId]);
+
       
           socket.emit('challengeClaimed', {
             challengeId,
@@ -1129,9 +1148,9 @@ io.on('connection', (socket) => {
         try {
           const username = playerUsername[socket.id];
           if (!username) return;
-      
+
           const client = await sql.connect();
-      
+
           const userResult = await client.query(
             'SELECT user_id FROM user_authentication WHERE user_name = $1',
             [username]
@@ -1141,46 +1160,53 @@ io.on('connection', (socket) => {
             client.release();
             return;
           }
-      
+
           const progressResult = await client.query(`
             SELECT ua.progress, ua.completed, ua.is_claimed,
-                   a.target,
-                   COALESCE(a.reward_coins, 0) AS reward_coins,
-                   COALESCE(a.reward_xp, 0) AS reward_xp
+                  a.target,
+                  COALESCE(a.reward_coins, 0) AS reward_coins,
+                  COALESCE(a.reward_xp, 0) AS reward_xp
             FROM user_achievements ua
             JOIN achievements a ON ua.achievement_id = a.achievement_id
             WHERE ua.user_id = $1 AND ua.achievement_id = $2
           `, [userId, achievementId]);
-      
+
           const achievement = progressResult.rows[0];
           if (!achievement || !achievement.completed || achievement.is_claimed || achievement.progress < achievement.target) {
             client.release();
             return;
           }
-      
+
           await client.query(`
             UPDATE user_profile
             SET coins = coins + $1, xp = xp + $2
             WHERE user_id = $3
           `, [achievement.reward_coins, achievement.reward_xp, userId]);
-      
+
           await client.query(`
             UPDATE user_achievements
             SET is_claimed = TRUE
             WHERE user_id = $1 AND achievement_id = $2
           `, [userId, achievementId]);
-      
+
+          await client.query(`
+            UPDATE user_achievements
+            SET completed = TRUE
+            WHERE user_id = $1 AND achievement_id = $2 AND completed = FALSE
+          `, [userId, achievementId]);
+
           socket.emit('achievementClaimed', {
             achievementId,
             coins: achievement.reward_coins,
             xp: achievement.reward_xp
           });
-      
+
           client.release();
         } catch (err) {
           console.error('Error claiming achievement:', err);
         }
       });
+
 
       
 });
@@ -1390,6 +1416,34 @@ async function updateProgress(username, type, amount) {
             SELECT target FROM challenges WHERE challenge_id = $2
           )
         `, [userId, row.challenge_id]);
+
+        const completedChallenge = await client.query(`
+          SELECT c.title
+          FROM user_challenges uc
+          JOIN challenges c ON uc.challenge_id = c.challenge_id
+          WHERE uc.user_id = $1 AND uc.challenge_id = $2
+            AND uc.completed = TRUE AND uc.is_claimed = FALSE
+            AND NOT EXISTS (
+              SELECT 1 FROM user_challenges log
+              WHERE log.user_id = $1 AND log.challenge_id = $2 AND log.notified = TRUE
+            )
+        `, [userId, row.challenge_id]);
+
+        if (completedChallenge.rows.length > 0) {
+          await client.query(`
+            UPDATE user_challenges
+            SET notified = TRUE
+            WHERE user_id = $1 AND challenge_id = $2
+          `, [userId, row.challenge_id]);
+
+          const challengeTitle = completedChallenge.rows[0].title;
+
+          io.to(activeSessions[username]).emit('challengeCompleted', {
+            challengeId: row.challenge_id,
+            title: challengeTitle
+          });
+        }
+
       }
   
       const achievementResult = await client.query(`
@@ -1412,7 +1466,33 @@ async function updateProgress(username, type, amount) {
             SELECT target FROM achievements WHERE achievement_id = $2
           )
         `, [userId, row.achievement_id]);
+
+        const completedAchievement = await client.query(`
+          SELECT a.title
+          FROM user_achievements ua
+          JOIN achievements a ON ua.achievement_id = a.achievement_id
+          WHERE ua.user_id = $1 AND ua.achievement_id = $2
+            AND ua.completed = TRUE AND ua.is_claimed = FALSE
+            AND ua.notified = FALSE
+        `, [userId, row.achievement_id]);
+
+        if (completedAchievement.rows.length > 0) {
+          await client.query(`
+            UPDATE user_achievements
+            SET notified = TRUE
+            WHERE user_id = $1 AND achievement_id = $2
+          `, [userId, row.achievement_id]);
+
+          const achievementTitle = completedAchievement.rows[0].title;
+          console.log('Emitting achievementCompleted to', username, 'with socket ID:', activeSessions[username]);
+          io.to(activeSessions[username]).emit('achievementCompleted', {
+            achievementId: row.achievement_id,
+            title: achievementTitle
+          });
+        }
+
       }
+      
   
       client.release();
     } catch (err) {

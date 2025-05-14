@@ -213,6 +213,17 @@ class Lobby extends Phaser.Scene {
         privateCancelButton.addEventListener('click', handleCancel);
         maxPlayersCancelButton.addEventListener('click', handleCancel);
         maxPlayersInput.addEventListener('keyup', handleEnterKey);
+
+        socket.on('achievementCompleted', ({ achievementId, title }) => {
+            console.log('Received achievementCompleted:', achievementId, title);
+            window.showTopNotification(`Achievement completed: ${title}! Reward is ready to be claimed.`);
+        });
+
+
+        socket.on('challengeCompleted', ({ challengeId, title }) => {
+            console.log('Received challengeCompleted:', challengeId, title);
+            window.showTopNotification(`Challenge completed: ${title}! Reward is ready to be claimed.`);
+        });
     }
 
     joinRoom(roomId) {
