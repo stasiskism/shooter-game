@@ -239,7 +239,7 @@ class Lobby extends Phaser.Scene {
         this.searchBox.setVisible(true);
         this.continueSearching = true;
 
-        const handleRoomJoined = (roomId) => {
+        const handleRoomJoined = ({ roomId, gamemode, hostId }) => {
             if (!this.continueSearching) return;
             this.searchBox.setVisible(false);
             this.continueSearching = false;
