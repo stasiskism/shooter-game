@@ -1113,9 +1113,6 @@ io.on('connection', (socket) => {
               WHERE user_id = $1 AND challenge_id = $2
             `, [userId, challengeId]);
 
-            io.to(activeSessions[username]).emit('challengeCompleted', {
-              challengeId
-            });
           }
 
           await client.query(`

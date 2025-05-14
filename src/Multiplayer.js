@@ -351,16 +351,18 @@ class Multiplayer extends Phaser.Scene {
                 }
             }
         })
-
+        socket.off('achievementCompleted'); //DUPLIKUOJA NOTIFICATIONUS IR NOTIFICATIONAI VIENU METU ATSIRANDA, REIKIA KAZKOKIO QUEUE
         socket.on('achievementCompleted', ({ achievementId, title }) => {
             console.log('Received achievementCompleted:', achievementId, title);
             window.showTopNotification(`Achievement completed: ${title}! Reward is ready to be claimed.`);
         });
 
-
+        socket.off('challengeCompleted');
         socket.on('challengeCompleted', ({ challengeId, title }) => {
             console.log('Received challengeCompleted:', challengeId, title);
+            
             window.showTopNotification(`Challenge completed: ${title}! Reward is ready to be claimed.`);
+
         });
 
         /*socket.on('updateGunAnimation', (playerId, animation, weapon) => {
@@ -673,41 +675,84 @@ class Multiplayer extends Phaser.Scene {
         }
     }
 
+    // gameWon(username) {
+    //     socket.removeAllListeners()
+    //     this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
+    //     const winningText = this.add.text(
+    //         this.cameras.main.width / 2,
+    //         this.cameras.main.height / 2,
+    //         `${username} has won the game!`,
+    //         { fontFamily: 'Arial', fontSize: 48, color: '#ffffff' }
+    //     );
+
+    //     winningText.setOrigin(0.5);
+
+    //     socket.emit('gameWon', this.multiplayerId, username)
+
+    //     this.time.delayedCall(5000, () => {
+    //         for (const id in this.frontendPlayers) {
+    //             this.removePlayer(id);
+    //         }
+    //         for (const id in this.frontendGrenades) {
+    //             this.removeGrenade(id)
+    //         }
+    //         for (const id in this.frontendSmoke) {
+    //             delete this.frontendSmoke[id]
+    //         }
+    //         for (const id in this.frontendProjectiles) {
+    //             this.removeProjectile(id)
+    //         }
+    //         for (const id in this.darkOverlay) {
+    //             delete this.darkOverlay[id]
+    //         }
+    //         socket.emit('leaveRoom', this.multiplayerId)
+    //         this.scene.stop()
+    //         this.scene.start('lobby');
+    //     });
+    // }
+
     gameWon(username) {
-        socket.removeAllListeners()
-        this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
-        const winningText = this.add.text(
-            this.cameras.main.width / 2,
-            this.cameras.main.height / 2,
-            `${username} has won the game!`,
-            { fontFamily: 'Arial', fontSize: 48, color: '#ffffff' }
-        );
+    // Remove only gameplay-related listeners
+    socket.off('updatePlayers');
+    socket.off('updateProjectiles');
+    socket.off('updateFallingObjects');
+    socket.off('playerAnimationUpdate');
+    socket.off('weaponStateUpdate');
+    
+    this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
+    const winningText = this.add.text(
+        this.cameras.main.width / 2,
+        this.cameras.main.height / 2,
+        `${username} has won the game!`,
+        { fontFamily: 'Arial', fontSize: 48, color: '#ffffff' }
+    );
 
-        winningText.setOrigin(0.5);
+    winningText.setOrigin(0.5);
 
-        socket.emit('gameWon', this.multiplayerId, username)
+    socket.emit('gameWon', this.multiplayerId, username);
 
-        this.time.delayedCall(5000, () => {
-            for (const id in this.frontendPlayers) {
-                this.removePlayer(id);
-            }
-            for (const id in this.frontendGrenades) {
-                this.removeGrenade(id)
-            }
-            for (const id in this.frontendSmoke) {
-                delete this.frontendSmoke[id]
-            }
-            for (const id in this.frontendProjectiles) {
-                this.removeProjectile(id)
-            }
-            for (const id in this.darkOverlay) {
-                delete this.darkOverlay[id]
-            }
-            socket.emit('leaveRoom', this.multiplayerId)
-            this.scene.stop()
-            this.scene.start('lobby');
-        });
-    }
+    this.time.delayedCall(5000, () => {
+        for (const id in this.frontendPlayers) {
+            this.removePlayer(id);
+        }
+        for (const id in this.frontendGrenades) {
+            this.removeGrenade(id);
+        }
+        for (const id in this.frontendSmoke) {
+            delete this.frontendSmoke[id];
+        }
+        for (const id in this.frontendProjectiles) {
+            this.removeProjectile(id);
+        }
+        for (const id in this.darkOverlay) {
+            delete this.darkOverlay[id];
+        }
+        socket.emit('leaveRoom', this.multiplayerId);
+        this.scene.stop();
+        this.scene.start('lobby');
+    });
+}
+
 
     grenadeExplode(x, y, id, explosion) {
         if (explosion === 'smoke') {
@@ -890,6 +935,18 @@ class Multiplayer extends Phaser.Scene {
         };
     
         return skinMap[skinId] || weaponDefaults[weaponId];
+    }
+
+    drawReloadCircle(progress) {
+        const centerX = this.crosshair.x;
+        const centerY = this.crosshair.y;
+        const radius = 30;
+
+        this.reloadIndicator.clear();
+        this.reloadIndicator.lineStyle(4, 0xffffff, 1);
+        this.reloadIndicator.beginPath();
+        this.reloadIndicator.arc(centerX, centerY, radius, Phaser.Math.DegToRad(270), Phaser.Math.DegToRad(270 + 360 * progress), false);
+        this.reloadIndicator.strokePath();
     }
 
 }
