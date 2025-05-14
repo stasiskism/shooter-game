@@ -22,12 +22,25 @@ class Room extends Phaser.Scene {
     }
     availableWeapons = []
     availableGrenades = []
+    gamemodes = [
+    'last_man_standing',
+    'deathmatch',
+    'capture_the_flag'
+    ];
+
+    selectedGamemodeIndex = 0;
+    gamemode = this.gamemodes[0];
+    gamemodeText = null;
+
+    
     constructor() {
         super({ key: 'room'});
     }
     init(data) {
         this.roomId = data.roomId
         this.mapSize = data.mapSize
+        this.gamemode = data.gamemode || 'last_man_standing';
+        this.hostId = data.hostId;
     }
     preload() {
         this.graphics = this.add.graphics()
@@ -63,6 +76,14 @@ class Room extends Phaser.Scene {
 
         socket.emit('joinRoom', this.roomId)
 
+        socket.on('roomJoined', ({ gamemode, hostId }) => {
+            this.gamemode = gamemode;
+            this.selectedGamemodeIndex = this.gamemodes.indexOf(gamemode);
+            this.hostId = hostId;
+            this.initGamemodeUI();
+        });
+
+
         socket.on('roomJoinFailed', errorMessage => {
             alert(errorMessage)
             this.scene.start('lobby')
@@ -97,19 +118,21 @@ class Room extends Phaser.Scene {
         });
 
         socket.on('countdownEnd', () => {
-            this.scene.start('Multiplayer', {multiplayerId: this.roomId, mapSize: this.mapSize})
-            this.scene.stop()
-            
+            const sceneToStart = this.gamemode === 'deathmatch' ? 'Deathmatch' : 'Multiplayer';
+            this.scene.start(sceneToStart, { multiplayerId: this.roomId, mapSize: this.mapSize });
+            this.scene.stop();
+
             for (const id in this.frontendPlayers) {
-                this.frontendPlayers[id].anims.stop()
+                this.frontendPlayers[id].anims.stop();
                 this.frontendPlayers[id].destroy();
                 this.playerUsernameText[id].destroy();
                 delete this.frontendPlayers[id];
                 delete this.playerUsernameText[id];
             }
-            this.chatHistory = []
-            socket.off('updateRoomPlayers')
-        })
+            
+            this.chatHistory = [];
+            socket.off('updateRoomPlayers');
+        });
 
         socket.on('playerAnimationUpdate', animData => {
             const { playerId, animation } = animData;
@@ -150,9 +173,9 @@ class Room extends Phaser.Scene {
             this.availableSkins = availableSkins;
             this.currentSkinIndex = 0;
             this.updateSkinDisplay();
-          });
+        });
           
-
+        this.registerGamemodeSocketEvents();
     }
 
     setupScene() {
@@ -221,7 +244,11 @@ class Room extends Phaser.Scene {
             socket.emit('updateReadyState', { playerId: socket.id, isReady, roomId: this.roomId });
         });
 
-        this.readyPlayersText = this.add.text((1920 / 2), (1080 / 2) - 400, `READY PLAYERS: 0`, {fontFamily: 'Berlin Sans FB Demi', fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5).setScale(2);
+        this.readyPlayersText = this.add.text(1920 / 2, (1080 / 2) - 500, `READY PLAYERS: 0`, {
+            fontFamily: 'Berlin Sans FB Demi',
+            fontSize: '32px',
+            fill: '#ffffff'
+        }).setOrigin(0.5).setScale(2);
 
         const chatButton = this.add.image(1890, 150, 'chat').setInteractive({ useHandCursor: true }).setScale(0.1)
 
@@ -588,6 +615,84 @@ class Room extends Phaser.Scene {
         };
         return textureMap[skinId] || 'default_skin';
       }
+
+      initGamemodeUI() {
+        const textY = (1080 / 2) - 390;
+
+        this.gamemodeText = this.add.text(this.centerX, textY, `Gamemode: ${this.formatGamemode(this.gamemode)}`, {
+            fontFamily: 'Berlin Sans FB Demi',
+            fontSize: '32px',
+            fill: '#ffffff'
+        }).setOrigin(0.5).setScale(2);
+
+        this.updateGamemodeDisplay();
+
+        const buttonOffsetX = 500;
+
+        if (socket.id === this.hostId) {
+            this.previousGamemodeButton = this.add.sprite(this.centerX - buttonOffsetX, textY, 'previousButton')
+                .setScale(0.2)
+                .setInteractive({ useHandCursor: true })
+                .setScrollFactor(0)
+                .setDepth(1);
+
+            this.nextGamemodeButton = this.add.sprite(this.centerX + buttonOffsetX, textY, 'nextButton')
+                .setScale(0.2)
+                .setInteractive({ useHandCursor: true })
+                .setScrollFactor(0)
+                .setDepth(1);
+
+            this.previousGamemodeButton.on('pointerdown', () => {
+                if (this.scene.key !== 'room') return;
+                this.handleGamemodeChange(-1);
+            });
+
+            this.nextGamemodeButton.on('pointerdown', () => {
+                if (this.scene.key !== 'room') return;
+                this.handleGamemodeChange(1);
+            });
+        }
+      }
+
+      updateGamemodeDisplay() {
+        const formatted = this.gamemode
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, char => char.toUpperCase());
+
+        if (this.gamemodeText) {
+        this.gamemodeText.setText(`Gamemode: ${formatted}`);
+        }
+      }
+
+      formatGamemode(mode) {
+        return mode
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+      }
+
+
+      handleGamemodeChange(direction) {
+        const totalModes = this.gamemodes.length;
+        this.selectedGamemodeIndex = (this.selectedGamemodeIndex + direction + totalModes) % totalModes;
+        this.gamemode = this.gamemodes[this.selectedGamemodeIndex];
+
+        this.updateGamemodeDisplay();
+
+        socket.emit('updateGamemode', {
+            roomId: this.roomId,
+            gamemode: this.gamemode
+        });
+      }
+
+      registerGamemodeSocketEvents() {
+        socket.on('roomGamemode', (gamemode) => {
+            this.gamemode = gamemode;
+            this.selectedGamemodeIndex = this.gamemodes.indexOf(gamemode);
+            this.updateGamemodeDisplay();
+        });
+      }
+
 
 }
 
