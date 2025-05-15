@@ -15,37 +15,58 @@
   </script>
   <script src="phaser.min.js"></script>
   <script>
-    window.showTopNotification = function (title) {
-      const notification = document.createElement('div');
-      notification.textContent = title;
-      notification.style.position = 'fixed';
-      notification.style.top = '20px';
-      notification.style.left = '50%';
-      notification.style.transform = 'translateX(-50%)';
-      notification.style.padding = '12px 24px';
-      notification.style.backgroundColor = '#222';
-      notification.style.color = '#fff';
-      notification.style.borderRadius = '6px';
-      notification.style.zIndex = 99999;
-      notification.style.fontFamily = 'Arial';
-      notification.style.fontSize = '16px';
-      notification.style.boxShadow = '0 2px 12px rgba(0, 0, 0, 0.4)';
-      notification.style.opacity = 0;
-      notification.style.transition = 'opacity 0.5s ease';
+    (function () {
+      let notificationQueue = [];
+      let isShowing = false;
 
-      document.body.appendChild(notification);
+      window.showTopNotification = function (message) {
+        notificationQueue.push(message);
+        if (!isShowing) {
+          showNextNotification();
+        }
+      };
 
-      setTimeout(() => {
-        notification.style.opacity = 1;
-      }, 10);
+      function showNextNotification() {
+        if (notificationQueue.length === 0) {
+          isShowing = false;
+          return;
+        }
 
-      setTimeout(() => {
+        isShowing = true;
+        const title = notificationQueue.shift();
+
+        const notification = document.createElement('div');
+        notification.textContent = title;
+        notification.style.position = 'fixed';
+        notification.style.top = '20px';
+        notification.style.left = '50%';
+        notification.style.transform = 'translateX(-50%)';
+        notification.style.padding = '12px 24px';
+        notification.style.backgroundColor = '#222';
+        notification.style.color = '#fff';
+        notification.style.borderRadius = '6px';
+        notification.style.zIndex = 99999;
+        notification.style.fontFamily = 'Arial';
+        notification.style.fontSize = '16px';
+        notification.style.boxShadow = '0 2px 12px rgba(0, 0, 0, 0.4)';
         notification.style.opacity = 0;
+        notification.style.transition = 'opacity 0.5s ease';
+
+        document.body.appendChild(notification);
+
         setTimeout(() => {
-          notification.remove();
-        }, 500);
-      }, 4000);
-    };
+          notification.style.opacity = 1;
+        }, 10);
+
+        setTimeout(() => {
+          notification.style.opacity = 0;
+          setTimeout(() => {
+            notification.remove();
+            showNextNotification();
+          }, 500);
+        }, 4000);
+      }
+    })();
   </script>
 
 

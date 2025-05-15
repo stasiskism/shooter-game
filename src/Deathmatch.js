@@ -417,16 +417,19 @@ class Deathmatch extends Phaser.Scene {
             });
         });
 
-        socket.on('achievementCompleted', ({ achievementId, title }) => {
-            window.showTopNotification(`Achievement completed: ${title}! Reward is ready to be claimed.`);
-        });
+        if (!window.socketNotificationHandlersSet) {
+            socket.on('achievementCompleted', ({ achievementId, title }) => {
+                console.log('Received achievementCompleted:', achievementId, title);
+                window.showTopNotification(`Achievement completed: ${title}! Reward is ready to be claimed.`);
+            });
 
+            socket.on('challengeCompleted', ({ challengeId, title }) => {
+                console.log('Received challengeCompleted:', challengeId, title);
+                window.showTopNotification(`Challenge completed: ${title}! Reward is ready to be claimed.`);
+            });
 
-
-        socket.on('challengeCompleted', ({ challengeId, title }) => {
-            window.showTopNotification(`Challenge completed: ${title}! Reward is ready to be claimed.`);
-        });
-
+            window.socketNotificationHandlersSet = true;
+        }
 
 
         socket.on('gameWon', (winnerUsername) => {
