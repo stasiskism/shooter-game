@@ -33,6 +33,15 @@ class Multiplayer extends Phaser.Scene {
     playersAffected = {}
     fallingObjects = []
 
+    badgeEmojiMap = {
+      no_reload: '🎯',
+      close_call: '❤️‍🩹',
+      unlock_all_weapons: '🔫',
+      unlock_all_skins: '🧢',
+      speed_demon: '⚡',
+      no_damage: '🧹'
+    };
+
 
     constructor() {
         super({ key: 'Multiplayer' });
@@ -379,7 +388,10 @@ class Multiplayer extends Phaser.Scene {
     startShooting(firerate) {
         if (!this.frontendPlayers[socket.id] || !this.crosshair) return;
         //this.frontendWeapons[socket.id].anims.play(`singleShot_${this.weapon[socket.id]}`, true);
-        this.sound.play(this.weapon[socket.id] + 'Sound', { volume: 0.5 })
+        const weaponKey = this.weapon[socket.id];
+        if (weaponKey) {
+            this.sound.play(`${weaponKey}Sound`, { volume: 0.5 });
+        }
         const direction = Math.atan((this.crosshair.x - this.frontendPlayers[socket.id].x) / (this.crosshair.y - this.frontendPlayers[socket.id].y))
         socket.emit('shoot', this.frontendPlayers[socket.id], this.crosshair, direction, this.multiplayerId);
         socket.emit('gunAnimation', {multiplayerId: this.multiplayerId, playerId: socket.id, animation: 'singleShot', weapon: this.weapon[socket.id]})
@@ -423,7 +435,17 @@ class Multiplayer extends Phaser.Scene {
         }
 
         this.frontendPlayers[id] = this.physics.add.sprite(playerData.x, playerData.y, 'idleDown').setScale(5);
-        this.playerUsername[id] = this.add.text(playerData.x, playerData.y - 50, playerData.username, { fontFamily: 'Arial', fontSize: 12, color: '#ffffff' });
+        const badgeKey = playerData.badge || null;
+        const badge = this.badgeEmojiMap?.[badgeKey] || '';
+        const displayName = badge ? `${badge} ${playerData.username}` : playerData.username;
+
+        this.playerUsername[id] = this.add.text(playerData.x, playerData.y - 50, displayName, {
+            fontFamily: 'Berlin Sans FB Demi',
+            fontSize: 16,
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setScale(2);
 
         const healthBarWidth = 100;
         const healthBarHeight = 10;
@@ -453,7 +475,14 @@ class Multiplayer extends Phaser.Scene {
         player.x = backendPlayer.x;
         player.y = backendPlayer.y;
 
-        this.playerHealth[id].container.setPosition(backendPlayer.x - 50, backendPlayer.y + 55);
+        if (this.playerHealth[id] && this.playerHealth[id].fg && this.playerHealth[id].container) {
+            const healthPercentage = backendPlayer.health / 100;
+            this.playerHealth[id].fg.scaleX = healthPercentage;
+            this.playerHealth[id].container.setPosition(backendPlayer.x - 50, backendPlayer.y + 55);
+        }
+
+
+
 
         if (id === socket.id && this.prevHealth !== undefined && backendPlayer.health < this.prevHealth) {
             this.showDamageFlash();
@@ -465,9 +494,15 @@ class Multiplayer extends Phaser.Scene {
         const healthPercentage = backendPlayer.health / 100;
         this.playerHealth[id].fg.scaleX = healthPercentage;
 
+        const badgeKey = backendPlayer.badge || null;
+        const badge = this.badgeEmojiMap?.[badgeKey] || '';
+        const displayName = badge ? `${badge} ${backendPlayer.username}` : backendPlayer.username;
+
+
+        this.playerUsername[id].setText(displayName);
         this.playerUsername[id].setPosition(backendPlayer.x, backendPlayer.y - 50);
-        this.playerUsername[id].setText(`${backendPlayer.username}`);
         this.playerUsername[id].setOrigin(0.5).setScale(2);
+
 
         if (id === socket.id) {
             this.ammo = backendPlayer.bullets;

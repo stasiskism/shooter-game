@@ -33,6 +33,15 @@ class Deathmatch extends Phaser.Scene {
     playersAffected = {}
     isRespawning = false;
 
+    badgeEmojiMap = {
+      no_reload: '🎯',
+      close_call: '❤️‍🩹',
+      unlock_all_weapons: '🔫',
+      unlock_all_skins: '🧢',
+      speed_demon: '⚡',
+      no_damage: '🧹'
+    };
+
 
     constructor() {
         super({ key: 'Deathmatch' });
@@ -320,8 +329,15 @@ class Deathmatch extends Phaser.Scene {
         });
 
         socket.on('removeKilledPlayer', ({ victimId, killerId }) => {
-            const killerName = killerId ? this.playerUsername[killerId]?.text : 'The Void';
-            const victimName = this.playerUsername[victimId]?.text;
+            const getDisplayName = (id) => {
+                const badge = this.badgeEmojiMap[this.frontendPlayers[id]?.badge] || '';
+                const name = this.frontendPlayers[id]?.username || 'Unknown';
+                return `${badge} ${name}`.trim();
+            };
+
+            const killerName = killerId ? getDisplayName(killerId) : 'The Void';
+            const victimName = getDisplayName(victimId);
+
 
             const feedX = this.cameras.main.width - 40;
             const feedY = 100 + this.killFeed.getLength() * 40;
@@ -340,13 +356,12 @@ class Deathmatch extends Phaser.Scene {
             this.time.delayedCall(4000, () => killText.destroy());
 
             if (killerId) {
-                if (!this.killCounts[killerName]) {
-                    this.killCounts[killerName] = 0;
+                if (!this.killCounts[killerId]) {
+                    this.killCounts[killerId] = 0;
                 }
-                this.killCounts[killerName]++;
+                this.killCounts[killerId]++;
                 this.updateLeaderboard();
             }
-
             this.removePlayer(victimId);
         });
 
@@ -486,7 +501,20 @@ class Deathmatch extends Phaser.Scene {
         }
 
         this.frontendPlayers[id] = this.physics.add.sprite(playerData.x, playerData.y, 'idleDown').setScale(5);
-        this.playerUsername[id] = this.add.text(playerData.x, playerData.y - 50, playerData.username, { fontFamily: 'Arial', fontSize: 12, color: '#ffffff' });
+        this.frontendPlayers[id].username = playerData.username;
+        this.frontendPlayers[id].badge = playerData.badge;
+
+        const badge = this.badgeEmojiMap[playerData.badge] || '';
+        const displayName = badge ? `${badge} ${playerData.username}` : playerData.username;
+
+        this.playerUsername[id] = this.add.text(playerData.x, playerData.y - 50, displayName, {
+            fontFamily: 'Arial',
+            fontSize: 16,
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setScale(2).setDepth(999);
+
         const healthBarWidth = 100;
         const healthBarHeight = 10;
         const healthBarBg = this.add.graphics().fillStyle(0xff0000).fillRect(0, 0, healthBarWidth, healthBarHeight);
@@ -526,9 +554,16 @@ class Deathmatch extends Phaser.Scene {
         const healthPercentage = backendPlayer.health / 100;
         this.playerHealth[id].fg.scaleX = healthPercentage;
 
-        this.playerUsername[id].setPosition(backendPlayer.x, backendPlayer.y - 50);
-        this.playerUsername[id].setText(`${backendPlayer.username}`);
-        this.playerUsername[id].setOrigin(0.5).setScale(2);
+        const badge = this.badgeEmojiMap[backendPlayer.badge] || '';
+        const displayName = badge ? `${badge} ${backendPlayer.username}` : backendPlayer.username;
+
+        this.playerUsername[id]
+            .setText(displayName)
+            .setPosition(backendPlayer.x, backendPlayer.y - 50)
+            .setOrigin(0.5)
+            .setScale(2)
+            .setDepth(999);
+
 
         if (id === socket.id) {
             this.ammo = backendPlayer.bullets;
@@ -963,14 +998,17 @@ class Deathmatch extends Phaser.Scene {
     }
 
     updateLeaderboard() {
-        const entries = Object.entries(this.killCounts)
+        const leaderboard = Object.entries(this.killCounts)
             .sort((a, b) => b[1] - a[1])
-            .slice(0, 5);
-
-        const leaderboard = entries.map(([name, kills], index) =>
-            `${index + 1}. ${name}: ${kills} kill${kills === 1 ? '' : 's'}`).join('\n');
+            .slice(0, 5)
+            .map(([id, kills], index) => {
+                const badge = this.badgeEmojiMap[this.frontendPlayers[id]?.badge] || '';
+                const name = this.frontendPlayers[id]?.username || 'Unknown';
+                return `${index + 1}. ${badge} ${name}: ${kills} kill${kills === 1 ? '' : 's'}`;
+            }).join('\n');
 
         this.leaderboardText.setText(`LEADERBOARD\n${leaderboard}`);
+
     }
 
 

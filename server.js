@@ -358,65 +358,102 @@ io.on('connection', (socket) => {
 
     socket.on('joinRoom', async (roomId) => {
         if (rooms[roomId]) {
-            projectileId = 0
-            availableWeapons[socket.id] = []
-            availableGrenades[socket.id] = []
+            projectileId = 0;
+            availableWeapons[socket.id] = [];
+            availableGrenades[socket.id] = [];
             const username = playerUsername[socket.id];
-            const weaponId = weaponIds[socket.id]
-            const grenadeId = grenadeIds[socket.id]
-            rooms[roomId].players.push({ id: socket.id, roomId, x: 1920 / 2, y: 1080 / 2, username, weaponId, grenadeId });
-            console.log('room joined', roomId)
-            socket.join(roomId);
-            socket.emit('roomJoined', {
-                roomId,
-                gamemode: rooms[roomId].gamemode || 'last_man_standing',
-                hostId: rooms[roomId].host
-            });
-            socket.emit('roomGamemode', rooms[roomId].gamemode || 'last_man_standing');
-            rooms[roomId].players = rooms[roomId].players.filter(player => player.id);
-            if (!readyPlayers[roomId]) {
-                readyPlayers[roomId] = {}
-            }
-            readyPlayers[roomId][socket.id] = false
+
             try {
-                const client = await sql.connect()
-                const resultGrenades = await client.query('SELECT grenade_id FROM user_grenades WHERE user_name = $1', [username])
-                const resultWeapons = await client.query('SELECT weapon_id FROM user_weapons WHERE user_name = $1', [username])
-                const resultSkins = await client.query('SELECT uw.skin_id, ws.weapon_id FROM user_weapon_skins uw JOIN weapon_skins ws ON uw.skin_id = ws.skin_id WHERE uw.user_name = $1', [username]);
+                const client = await sql.connect();
+
+                const badgeRes = await client.query(
+                    'SELECT selected_badge FROM user_profile WHERE user_name = $1',
+                    [username]
+                );
+                const badgeKey = badgeRes.rows[0]?.selected_badge || null;
+
+                const weaponId = weaponIds[socket.id];
+                const grenadeId = grenadeIds[socket.id];
+
+                rooms[roomId].players.push({
+                    id: socket.id,
+                    roomId,
+                    x: 1920 / 2,
+                    y: 1080 / 2,
+                    username,
+                    weaponId,
+                    grenadeId,
+                    badge: badgeKey
+                });
+
+                console.log('room joined', roomId);
+                socket.join(roomId);
+
+                socket.emit('roomJoined', {
+                    roomId,
+                    gamemode: rooms[roomId].gamemode || 'last_man_standing',
+                    hostId: rooms[roomId].host
+                });
+
+                socket.emit('roomGamemode', rooms[roomId].gamemode || 'last_man_standing');
+
+                rooms[roomId].players = rooms[roomId].players.filter(player => player.id);
+                if (!readyPlayers[roomId]) {
+                    readyPlayers[roomId] = {};
+                }
+                readyPlayers[roomId][socket.id] = false;
+
+                const resultGrenades = await client.query(
+                    'SELECT grenade_id FROM user_grenades WHERE user_name = $1',
+                    [username]
+                );
+                const resultWeapons = await client.query(
+                    'SELECT weapon_id FROM user_weapons WHERE user_name = $1',
+                    [username]
+                );
+                const resultSkins = await client.query(
+                    `SELECT uw.skin_id, ws.weapon_id 
+                    FROM user_weapon_skins uw 
+                    JOIN weapon_skins ws ON uw.skin_id = ws.skin_id 
+                    WHERE uw.user_name = $1`,
+                    [username]
+                );
+
                 for (const row of resultGrenades.rows) {
-                    availableGrenades[socket.id].push(row.grenade_id)
+                    availableGrenades[socket.id].push(row.grenade_id);
                 }
                 for (const row of resultWeapons.rows) {
-                    availableWeapons[socket.id].push(row.weapon_id)
+                    availableWeapons[socket.id].push(row.weapon_id);
                 }
-                /* Group unlocked skin_ids by their associated weapon_id so we can access skins per weapon from this
-                [
-                    { weapon_id: 2, skin_id: 5 },
-                    { weapon_id: 2, skin_id: 6 },
-                    { weapon_id: 3, skin_id: 7 },
-                ] to this 
-                    {
-                        2: [5, 6],
-                        3: [7]
-                    }
-                    */
+
                 const availableSkins = resultSkins.rows.reduce((acc, row) => {
                     if (!acc[row.weapon_id]) acc[row.weapon_id] = [];
                     acc[row.weapon_id].push(row.skin_id);
                     return acc;
-                  }, {});
-                  io.to(socket.id).emit('availableWeapons', availableWeapons[socket.id], availableGrenades[socket.id], availableSkins);
+                }, {});
+
+                client.release();
+
+                io.to(socket.id).emit('availableWeapons', availableWeapons[socket.id], availableGrenades[socket.id], availableSkins);
+                io.to(roomId).emit('updateRoomPlayers', rooms[roomId].players);
             } catch (error) {
-                const client = await sql.connect()
-                console.error('Error getting available weapons and grenades:', error);
-                await client.query('INSERT INTO error_logs (error_message, error_details) VALUES ($1, $2)', [error.detail, error])
-                client.release()
+                console.error('Error in joinRoom:', error);
+                try {
+                    const client = await sql.connect();
+                    await client.query(
+                        'INSERT INTO error_logs (error_message, error_details) VALUES ($1, $2)',
+                        [error.message, JSON.stringify(error)]
+                    );
+                    client.release();
+                } catch (logErr) {
+                    console.error('Failed to log error to DB:', logErr);
+                }
             }
-            io.to(roomId).emit('updateRoomPlayers', rooms[roomId].players); // Emit only to players in the same room
         } else {
             socket.emit('roomJoinFailed', 'Room is full or does not exist');
         }
     });
+
 
     socket.on('updateGamemode', ({ roomId, gamemode }) => {
         if (rooms[roomId]) {
@@ -570,6 +607,7 @@ io.on('connection', (socket) => {
     socket.on('playerMove', (data) => {
         const movementSpeed = 2
         let mapSize = 250
+        if (!backendPlayers[socket.id]) return;
         const multiplayerId = backendPlayers[socket.id].multiplayerId;
         const gamemode = rooms[multiplayerId]?.gamemode;
         if (backendPlayers[socket.id]) {
@@ -1236,7 +1274,8 @@ function filterPlayersByMultiplayerId(multiplayerId) {
                 firerate: weaponDetails[playerId].fire_rate,
                 reload: weaponDetails[playerId].reload,
                 radius: weaponDetails[playerId].radius,
-                multiplayerId: player.multiplayerId
+                multiplayerId: player.multiplayerId,
+                badge: rooms[multiplayerId]?.players.find(p => p.id === playerId)?.badge || null
               };
         }
     }
@@ -1311,7 +1350,8 @@ function startGame(multiplayerId) {
             weaponId,
             skinId: skinIds[id] || null,
             _isDead: false,
-            reloaded: false
+            reloaded: false,
+            badge: rooms[multiplayerId]?.players.find(p => p.id === id)?.badge || null
         };
 
         if (rooms[multiplayerId]?.gamemode === 'deathmatch') {
@@ -2008,6 +2048,7 @@ app.get('/get-skin-listings', async (req, res) => {
           a.target,
           a.reward_coins,
           a.reward_xp,
+          a.trigger_key,
           COALESCE(ua.progress, 0) AS progress,
           ua.completed,
           COALESCE(ua.is_claimed, false) AS is_claimed
@@ -2015,10 +2056,39 @@ app.get('/get-skin-listings', async (req, res) => {
         LEFT JOIN user_achievements ua ON a.achievement_id = ua.achievement_id AND ua.user_id = $1
       `, [userId]);
 
+
       res.json(result.rows);
     } catch (err) {
       console.error('Error fetching achievements:', err);
       res.status(500).json({ error: 'Failed to load achievements' });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.get('/get-badge', async (req, res) => {
+    const { username } = req.query;
+    const client = await sql.connect();
+    try {
+      const result = await client.query(`SELECT selected_badge FROM user_profile WHERE user_name = $1`, [username]);
+      res.json({ badge: result.rows[0]?.selected_badge || null });
+    } catch (error) {
+      console.error('Error getting badge:', error);
+      res.status(500).json({ error: 'Failed to get badge' });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post('/set-badge', async (req, res) => {
+    const { username, badgeKey } = req.body;
+    const client = await sql.connect();
+    try {
+      await client.query(`UPDATE user_profile SET selected_badge = $1 WHERE user_name = $2`, [badgeKey, username]);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error setting badge:', error);
+      res.status(500).json({ error: 'Failed to set badge' });
     } finally {
       client.release();
     }
@@ -2159,7 +2229,7 @@ setInterval(async () => {
     }
 }, 15);
 
-const PORT = 443;
+const PORT = 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });

@@ -32,6 +32,14 @@ class Room extends Phaser.Scene {
     gamemode = this.gamemodes[0];
     gamemodeText = null;
 
+    badgeEmojiMap = {
+      no_reload: '🎯',
+      close_call: '❤️‍🩹',
+      unlock_all_weapons: '🔫',
+      unlock_all_skins: '🧢',
+      speed_demon: '⚡',
+      no_damage: '🧹'
+    };
     
     constructor() {
         super({ key: 'room'});
@@ -83,7 +91,6 @@ class Room extends Phaser.Scene {
             this.initGamemodeUI();
         });
 
-
         socket.on('roomJoinFailed', errorMessage => {
             alert(errorMessage)
             this.scene.start('lobby')
@@ -119,7 +126,11 @@ class Room extends Phaser.Scene {
 
         socket.on('countdownEnd', () => {
             const sceneToStart = this.gamemode === 'deathmatch' ? 'Deathmatch' : 'Multiplayer';
-            this.scene.start(sceneToStart, { multiplayerId: this.roomId, mapSize: this.mapSize });
+            this.scene.start(sceneToStart, {
+                multiplayerId: this.roomId,
+                mapSize: this.mapSize,
+                gamemode: this.gamemode
+            });
             this.scene.stop();
 
             for (const id in this.frontendPlayers) {
@@ -131,7 +142,7 @@ class Room extends Phaser.Scene {
             }
             
             this.chatHistory = [];
-            socket.off('updateRoomPlayers');
+            socket.removeAllListeners();
         });
 
         socket.on('playerAnimationUpdate', animData => {
@@ -279,6 +290,10 @@ class Room extends Phaser.Scene {
             wordWrap: { width: 380, useAdvancedWrap: true }
         }).setInteractive().setDepth(1);
         this.chatDisplay.setFixedSize(380, 380);
+
+        this.chatHistory = [];
+        this.chatDisplay.setText('');
+
         
         const chatInputHTML = `
             <div style="position: fixed; bottom: 10px; left: 10px;">
@@ -426,7 +441,19 @@ class Room extends Phaser.Scene {
     setupPlayer(id, playerData) {
         this.frontendPlayers[id] = this.physics.add.sprite(playerData.x, playerData.y, 'idle').setScale(4);
         this.playerUsername[id] = playerData.username;
-        this.playerUsernameText[id] = this.add.text(playerData.x, playerData.y - 50, playerData.username, { fontFamily: 'Arial', fontSize: 12, color: '#ffffff' }).setOrigin(0.5).setScale(2);
+
+        const badgeKey = playerData.badge || null;
+        const badge = this.badgeEmojiMap[badgeKey] || '';
+        const displayName = badge ? `${badge} ${playerData.username}` : playerData.username;
+
+        this.playerUsernameText[id] = this.add.text(playerData.x, playerData.y - 50, displayName, {
+            fontFamily: 'Arial',
+            fontSize: 18,
+            color: '#ffffff',
+            stroke: '#000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
         
         if (id === socket.id) {
             this.weaponId = playerData.weaponId
@@ -566,7 +593,10 @@ class Room extends Phaser.Scene {
         
         if (this.playerUsernameText[id]) {
             this.playerUsernameText[id].setPosition(roomPlayer.x, roomPlayer.y - 50);
-            this.playerUsernameText[id].setText(roomPlayer.username);
+            const badgeKey = roomPlayer.badge || null;
+            const badge = this.badgeEmojiMap[badgeKey] || '';
+            const displayName = badge ? `${badge} ${roomPlayer.username}` : roomPlayer.username;
+            this.playerUsernameText[id].setText(displayName);
         }
     }
 
@@ -577,7 +607,6 @@ class Room extends Phaser.Scene {
         }
         if (count === this.readyPlayersCount && count > 0) { // > 1
             this.readyButton.destroy()
-            console.log('VISI PLAYERIAI READY')
             this.countdownText = this.add.text(800, 200, '', { fontSize: '64px', fill: '#fff' });
             this.countdownText.setOrigin(0.5);
             this.mapSize = count * 250

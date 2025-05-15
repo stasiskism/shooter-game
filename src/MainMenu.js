@@ -17,6 +17,18 @@ class MainMenu extends Phaser.Scene {
     this.currentLevelText = null;
     this.nextLevelText = null;
     this.percentageText = null;
+    this.usernameText = null;
+    this.selectedBadge = null;
+    this.badgeEmojiMap = {
+      no_reload: '🎯',
+      close_call: '❤️‍🩹',
+      unlock_all_weapons: '🔫',
+      unlock_all_skins: '🧢',
+      speed_demon: '⚡',
+      no_damage: '🧹'
+    };
+
+
   }
 
   init(data) {
@@ -31,6 +43,26 @@ class MainMenu extends Phaser.Scene {
     this.setupInputEvents();
     this.settingsButton = new SettingsButtonWithPanel(this, 1890, 90);
     this.events.on('settingsPanelOpened', this.onSettingsPanelOpened, this);
+    const badge = this.badgeEmojiMap[this.selectedBadge] || '';
+    const displayName = badge ? `${badge} ${this.username}` : this.username;
+
+    this.usernameText = this.add.text(this.player.x, this.player.y - 50, displayName, {
+      fontFamily: 'Arial',
+      fontSize: 18,
+      color: '#ffffff',
+      stroke: '#000',
+      strokeThickness: 3
+    }).setOrigin(0.5);
+
+    fetch(`/get-badge?username=${this.username}`)
+      .then(res => res.json())
+      .then(data => {
+        this.selectedBadge = data.badge;
+        this.showPlayerUsernameTag();
+      })
+      .catch(err => {
+        console.error('Error loading badge:', err);
+      });
   }
 
   onSettingsPanelOpened() {
@@ -130,6 +162,19 @@ class MainMenu extends Phaser.Scene {
     .on('pointerdown', () => {
       this.showChallengesUI();
     });
+
+    fetch(`/get-badge?username=${this.username}`)
+    .then(res => res.json())
+    .then(data => {
+      this.selectedBadge = data.badge;
+      this.showPlayerUsernameTag();
+    })
+    .catch(err => {
+      console.error('Error loading badge:', err);
+      this.selectedBadge = null;
+      this.showPlayerUsernameTag();
+    });
+
   }
 
   showLogout() {
@@ -165,6 +210,9 @@ class MainMenu extends Phaser.Scene {
 
   update() {
     this.updatePlayerMovement();
+    if (this.usernameText && this.player) {
+      this.usernameText.setPosition(this.player.x, this.player.y - 50);
+    }
   }
 
   updatePlayerMovement() {
@@ -320,53 +368,128 @@ class MainMenu extends Phaser.Scene {
   }
 
   showAchievementsUI() {
-    fetch(`/get-achievements?username=${this.username}`)
+
+    fetch(`/get-badge?username=${this.username}`)
       .then(res => res.json())
-      .then(data => {
-        const container = document.getElementById('progress-ui');
-        const list = document.getElementById('progress-list');
-        const title = document.getElementById('progress-title');
-        title.textContent = 'Achievements';
-        list.innerHTML = '';
+      .then(badgeData => {
+        const selectedBadgeKey = badgeData.badge;
 
-        data.forEach(ach => {
-          const isComplete = ach.completed;
-          const isClaimed = ach.is_claimed;
+        fetch(`/get-achievements?username=${this.username}`)
+          .then(res => res.json())
+          .then(data => {
+            const container = document.getElementById('progress-ui');
+            const list = document.getElementById('progress-list');
+            const title = document.getElementById('progress-title');
+            title.textContent = 'Achievements';
+            list.innerHTML = '';
 
-          const item = document.createElement('div');
-          item.style.marginBottom = '12px';
-          item.innerHTML = `
-            <strong>${ach.title}</strong><br/>
-            ${ach.description}<br/>
-            ${isComplete && !isClaimed ? '<span style="color: lightgreen">Reward Ready!</span>' : ''}
-            ${isClaimed ? '<span style="color: gray">Reward Claimed</span>' : ''}
-          `;
+            data.forEach(ach => {
+              const isComplete = ach.completed;
+              const isClaimed = ach.is_claimed;
+              const hasBadge = !!this.badgeEmojiMap[ach.trigger_key]; // makes boolean
+              const badgeEmoji = this.badgeEmojiMap[ach.trigger_key] || '';
 
-          if (isComplete && !isClaimed) {
-            const claimButton = document.createElement('button');
-            claimButton.textContent = 'Claim Reward';
-            claimButton.onclick = () => {
-              socket.emit('claimAchievementReward', { achievementId: ach.achievement_id });
-              socket.once('achievementClaimed', ({ achievementId, coins, xp }) => {
-                alert(`+${coins} Coins, +${xp} XP`);
-                this.showAchievementsUI();
-              });
+              const item = document.createElement('div');
+              item.style.marginBottom = '12px';
+              item.innerHTML = `
+                <strong>${ach.title}</strong>
+                ${hasBadge ? `<span style="font-size: 20px;"> ${badgeEmoji}</span>` : ''}<br/>
+                ${ach.description}<br/>
+                Progress: ${ach.progress}/${ach.target}<br/>
+                ${isComplete && !isClaimed ? '<span style="color: lightgreen">Reward Ready!</span>' : ''}
+                ${isClaimed ? '<span style="color: gray">Reward Claimed</span>' : ''}
+              `;
+
+              if (isComplete && !isClaimed) {
+                const claimButton = document.createElement('button');
+                claimButton.textContent = 'Claim Reward';
+                claimButton.onclick = () => {
+                  socket.emit('claimAchievementReward', { achievementId: ach.achievement_id });
+                  socket.once('achievementClaimed', ({ achievementId, coins, xp }) => {
+                    alert(`+${coins} Coins, +${xp} XP`);
+                    this.showAchievementsUI();
+                  });
+                };
+                item.appendChild(document.createElement('br'));
+                item.appendChild(claimButton);
+              }
+
+              if (isClaimed && hasBadge) {
+                const isSelected = ach.trigger_key === selectedBadgeKey;
+                const badgeBtn = document.createElement('button');
+                badgeBtn.textContent = isSelected ? 'Selected Badge ✔️' : 'Set as Badge';
+                badgeBtn.disabled = isSelected;
+                badgeBtn.onclick = () => {
+                  fetch('/set-badge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: this.username, badgeKey: ach.trigger_key })
+                  })
+                    .then(() => {
+                      this.selectedBadge = ach.trigger_key;
+                      this.showPlayerUsernameTag();
+                      alert('Badge updated!');
+                      this.showAchievementsUI();
+                    })
+                    .catch(err => console.error('Failed to set badge:', err));
+                };
+                item.appendChild(document.createElement('br'));
+                item.appendChild(badgeBtn);
+              }
+
+              list.appendChild(item);
+            });
+
+            const removeBadgeBtn = document.createElement('button');
+            removeBadgeBtn.textContent = 'Remove Badge';
+            removeBadgeBtn.onclick = () => {
+              fetch('/set-badge', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: this.username, badgeKey: null })
+              })
+                .then(() => {
+                  this.selectedBadge = null;
+                  this.showPlayerUsernameTag();
+                  alert('Badge removed.');
+                  this.showAchievementsUI();
+                })
+                .catch(err => console.error('Failed to remove badge:', err));
             };
-            item.appendChild(document.createElement('br'));
-            item.appendChild(claimButton);
-          }
+            list.appendChild(document.createElement('br'));
+            list.appendChild(removeBadgeBtn);
 
-          list.appendChild(item);
-        });
-
-        container.style.display = 'block';
+            container.style.display = 'block';
+          })
+          .catch(err => {
+            console.error('Error loading achievements:', err);
+          });
       })
-      .catch(err => console.error('Error loading achievements:', err));
+      .catch(err => {
+        console.error('Error loading selected badge:', err);
+      });
+  }
+
+  showPlayerUsernameTag() {
+    if (!this.player) return;
+
+    const badge = this.badgeEmojiMap[this.selectedBadge] || '';
+    const displayName = badge ? `${badge} ${this.username}` : this.username;
+
+    if (!this.usernameText) {
+      this.usernameText = this.add.text(this.player.x, this.player.y - 50, displayName, {
+        fontFamily: 'Arial',
+        fontSize: 18,
+        color: '#ffffff',
+        stroke: '#000',
+        strokeThickness: 3
+      }).setOrigin(0.5);
+    } else {
+      this.usernameText.setText(displayName);
+    }
   }
 
 
-  
-  
 
 }
 
