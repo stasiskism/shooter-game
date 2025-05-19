@@ -663,15 +663,23 @@ class Marketplace extends Phaser.Scene {
     searchTimeout = setTimeout(() => {
       this.fetchSkinListings(1, true, query); // Reset to page 1 on search
     }, 300);
+
+    
     
   });
 
     searchInput.addEventListener('keydown', (e) => {
-    const allowedKeys = ['w', 'a', 's', 'd', 'W', 'A', 'S', 'D'];
-    if (allowedKeys.includes(e.key)) {
-      e.stopPropagation(); // Prevent the input from stopping propagation
-    }
-  });
+      const allowedKeys = ['w', 'a', 's', 'd', 'W', 'A', 'S', 'D'];
+      if (allowedKeys.includes(e.key)) {
+        e.stopPropagation();
+      }
+
+      if (e.key === 'Escape') {
+        searchInput.blur();
+        searchInput.value = '';
+        this.fetchSkinListings(1, true);
+      }
+    });
   
     closeBtn.addEventListener('click', () => {
       skinMarketplaceContainer.style.display = 'none';

@@ -27,6 +27,8 @@ class MainMenu extends Phaser.Scene {
       speed_demon: '⚡',
       no_damage: '🧹'
     };
+    this.isAchievementsUIOpen = false;
+    this.isChallengesUIOpen = false;
 
 
   }
@@ -322,6 +324,10 @@ class MainMenu extends Phaser.Scene {
   }
 
   showChallengesUI() {
+    if (this.isAchievementsUIOpen) {
+      return;
+    }
+    this.isChallengesUIOpen = true;
     fetch(`/get-challenges?username=${this.username}`)
       .then(res => res.json())
       .then(data => {
@@ -362,13 +368,24 @@ class MainMenu extends Phaser.Scene {
           list.appendChild(item);
         });
 
+        const closeBtn = document.getElementById('progress-close-button');
+        if (closeBtn) {
+          closeBtn.onclick = () => {
+            document.getElementById('progress-ui').style.display = 'none';
+            this.isChallengesUIOpen = false;
+          };
+        }
+
         container.style.display = 'block';
       })
       .catch(err => console.error('Error loading challenges:', err));
   }
 
   showAchievementsUI() {
-
+    if (this.isChallengesUIOpen) {
+      return;
+    }
+    this.isAchievementsUIOpen = true;
     fetch(`/get-badge?username=${this.username}`)
       .then(res => res.json())
       .then(badgeData => {
@@ -386,7 +403,7 @@ class MainMenu extends Phaser.Scene {
             data.forEach(ach => {
               const isComplete = ach.completed;
               const isClaimed = ach.is_claimed;
-              const hasBadge = !!this.badgeEmojiMap[ach.trigger_key]; // makes boolean
+              const hasBadge = !!this.badgeEmojiMap[ach.trigger_key]; // !!makes boolean
               const badgeEmoji = this.badgeEmojiMap[ach.trigger_key] || '';
 
               const item = document.createElement('div');
@@ -417,7 +434,7 @@ class MainMenu extends Phaser.Scene {
               if (isClaimed && hasBadge) {
                 const isSelected = ach.trigger_key === selectedBadgeKey;
                 const badgeBtn = document.createElement('button');
-                badgeBtn.textContent = isSelected ? 'Selected Badge ✔️' : 'Set as Badge';
+                badgeBtn.textContent = isSelected ? 'Selected Badge' : 'Set as Badge';
                 badgeBtn.disabled = isSelected;
                 badgeBtn.onclick = () => {
                   fetch('/set-badge', {
@@ -458,6 +475,14 @@ class MainMenu extends Phaser.Scene {
             };
             list.appendChild(document.createElement('br'));
             list.appendChild(removeBadgeBtn);
+
+            const closeBtn = document.getElementById('progress-close-button');
+            if (closeBtn) {
+              closeBtn.onclick = () => {
+                document.getElementById('progress-ui').style.display = 'none';
+                this.isAchievementsUIOpen = false;
+              };
+            }
 
             container.style.display = 'block';
           })

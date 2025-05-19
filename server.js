@@ -962,16 +962,20 @@ io.on('connection', (socket) => {
                 if (backendPlayers[killerId]) {
                     backendPlayers[killerId].kills = (backendPlayers[killerId].kills || 0) + 1;
 
-                    if (backendPlayers[killerId].kills === 2) {
-                        const winnerUsername = backendPlayers[killerId].username;
-                        const multiplayerId = backendPlayers[killerId].multiplayerId;
+                    if (backendPlayers[killerId]) {
+                        backendPlayers[killerId].kills = (backendPlayers[killerId].kills || 0) + 1;
 
-                        if (!rooms[multiplayerId]?.gameEnded && backendPlayers[killerId].kills === 2) {
+                        if (
+                          rooms[multiplayerId]?.gamemode === 'deathmatch' &&
+                          !rooms[multiplayerId]?.gameEnded &&
+                          backendPlayers[killerId].kills === 2
+                        ) {
+                            const winnerUsername = backendPlayers[killerId].username;
+                            const multiplayerId = backendPlayers[killerId].multiplayerId;
                             rooms[multiplayerId].gameEnded = true;
                             io.to(multiplayerId).emit('gameWon', winnerUsername);
                         }
-                    }
-                } 
+                    } 
 
                 if (gamemode === 'deathmatch') {
                     io.to(multiplayerId).emit('removeKilledPlayer', {
@@ -984,6 +988,7 @@ io.on('connection', (socket) => {
                 }
 
             }
+          }
         }
 
         delete backendGrenades[grenadeId];
@@ -1320,7 +1325,7 @@ function startGame(multiplayerId) {
         const j = Math.floor(Math.random() * (i + 1));
         [corners[i], corners[j]] = [corners[j], corners[i]];
     }
-    playersInRoom.forEach((player, index) => {
+    playersInRoom.forEach(async(player, index) => {
         const id = player.id
         const username = playerUsername[id];
         const weaponId = weaponIds[id];
@@ -1358,6 +1363,9 @@ function startGame(multiplayerId) {
             backendPlayers[id].kills = 0;
             backendPlayers[id].deaths = 0;
         }
+
+        await updateProgress(username, 'play_match', 1);
+        await updateProgress(username, 'play_games', 1);
 
     });
 }
@@ -1433,10 +1441,17 @@ async function updateProgress(username, type, amount) {
         return;
       }
   
+      const weeksSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24 * 7));
+      const maxGroupResult = await client.query('SELECT MAX(rotation_group) AS max FROM challenges');
+      const maxGroup = maxGroupResult.rows[0].max || 1;
+      const rotationGroup = (weeksSinceEpoch % maxGroup) + 1;
+
       const challengeResult = await client.query(`
         SELECT challenge_id FROM challenges
-        WHERE type IN ('daily', 'weekly') AND LOWER(trigger_key) = LOWER($1)
-      `, [type]);
+        WHERE type IN ('daily', 'weekly')
+          AND rotation_group = $2
+          AND LOWER(trigger_key) = LOWER($1)
+      `, [type, rotationGroup]);
   
       for (const row of challengeResult.rows) {
         await client.query(`
@@ -2165,15 +2180,17 @@ setInterval(async () => {
                     if (backendPlayers[shooterId]) {
                         backendPlayers[shooterId].kills = (backendPlayers[shooterId].kills || 0) + 1;
 
-                        if (backendPlayers[shooterId].kills === 2) {
+                        if (
+                          rooms[multiplayerId]?.gamemode === 'deathmatch' &&
+                          !rooms[multiplayerId]?.gameEnded &&
+                          backendPlayers[shooterId].kills === 2
+                        ) {
                             const winnerUsername = backendPlayers[shooterId].username;
                             const multiplayerId = backendPlayers[shooterId].multiplayerId;
-
-                            if (!rooms[multiplayerId]?.gameEnded && backendPlayers[shooterId].kills === 2) {
-                                rooms[multiplayerId].gameEnded = true;
-                                io.to(multiplayerId).emit('gameWon', winnerUsername);
-                            }
+                            rooms[multiplayerId].gameEnded = true;
+                            io.to(multiplayerId).emit('gameWon', winnerUsername);
                         }
+
                     }
 
                     if (gamemode === 'deathmatch') {

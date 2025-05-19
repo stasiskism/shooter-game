@@ -225,7 +225,7 @@ class Deathmatch extends Phaser.Scene {
             const startTime = this.time.now;
 
             this.reloadTimer = this.time.addEvent({
-                delay: 16, // ~60 FPS
+                delay: 16,
                 loop: true,
                 callback: () => {
                     const elapsed = this.time.now - startTime;
@@ -773,7 +773,13 @@ class Deathmatch extends Phaser.Scene {
     gameWon(username) {
     this.gameStop = true;
 
-    socket.removeAllListeners();
+    socket.off('updatePlayers');
+    socket.off('updateProjectiles');
+    socket.off('playerAnimationUpdate');
+    socket.off('weaponStateUpdate');
+    socket.off('removeKilledPlayer');
+    socket.off('startRespawnCountdown');
+    socket.off('gameWon');
     this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
     this.add.text(
         this.cameras.main.width / 2,
