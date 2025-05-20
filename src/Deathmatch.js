@@ -42,6 +42,9 @@ class Deathmatch extends Phaser.Scene {
       no_damage: '🧹'
     };
 
+    barrels = {};
+    explodedBarrels = new Set();
+
 
     constructor() {
         super({ key: 'Deathmatch' });
@@ -338,6 +341,12 @@ class Deathmatch extends Phaser.Scene {
             const killerName = killerId ? getDisplayName(killerId) : 'The Void';
             const victimName = getDisplayName(victimId);
 
+            let killTextContent;
+            if (killerId === victimId) {
+                killTextContent = `${killerName} blew himself up 💥`;
+            } else {
+                killTextContent = `${killerName} → ${victimName}`;
+            }
 
             const feedX = this.cameras.main.width - 40;
             const feedY = 100 + this.killFeed.getLength() * 40;
@@ -355,7 +364,7 @@ class Deathmatch extends Phaser.Scene {
             this.killFeed.add(killText);
             this.time.delayedCall(4000, () => killText.destroy());
 
-            if (killerId) {
+            if (killerId && killerId !== victimId) {
                 if (!this.killCounts[killerId]) {
                     this.killCounts[killerId] = 0;
                 }
@@ -370,12 +379,12 @@ class Deathmatch extends Phaser.Scene {
         socket.on('startRespawnCountdown', ({ killerUsername }) => {
             if (this.isRespawning || this.gameStop) return;
             this.isRespawning = true;
+            this.stopShooting();
             this.removePlayer(socket.id)
-
-            if (this.frontendPlayers[socket.id]) {
-                this.removePlayer(socket.id);
+            if (this.playerAmmo) this.playerAmmo.setVisible(false);
+            if (this.playerHealth[socket.id]?.container) {
+                this.playerHealth[socket.id].container.setVisible(false);
             }
-
             this.input.keyboard.enabled = false;
             this.input.mouse.enabled = false;
 
@@ -450,10 +459,32 @@ class Deathmatch extends Phaser.Scene {
         socket.on('gameWon', (winnerUsername) => {
             this.gameWon(winnerUsername);
         });
+
+        socket.on('spawnExplosiveBarrels', (barrels) => {
+            if (typeof barrels === 'object' && barrels !== null) {
+                Object.values(barrels).forEach(barrel => {
+                    const sprite = this.physics.add.sprite(barrel.x, barrel.y, 'barrel').setScale(0.1);
+                    this.explosiveBarrels = this.explosiveBarrels || {};
+                    this.explosiveBarrels[barrel.id] = sprite;
+                });
+            }
+        });
+
+        socket.on('barrelExploded', ({ id, x, y }) => {
+            const barrel = this.explosiveBarrels?.[id];
+            if (barrel) {
+                barrel.destroy();
+                delete this.explosiveBarrels[id];
+            }
+
+            const explosion = this.add.sprite(x, y - 100, 'explosion_1').setScale(7);
+            explosion.play('explosion_anim');
+            explosion.on('animationcomplete', () => explosion.destroy());
+        });
     }
 
     startShooting(firerate) {
-        if (this.gameStop || !this.frontendPlayers[socket.id] || !this.crosshair) return;
+        if (this.gameStop || this.isRespawning || !this.frontendPlayers[socket.id] || !this.crosshair) return;
         //this.frontendWeapons[socket.id].anims.play(`singleShot_${this.weapon[socket.id]}`, true);
         this.sound.play(this.weapon[socket.id] + 'Sound', { volume: 0.5 })
         const direction = Math.atan((this.crosshair.x - this.frontendPlayers[socket.id].x) / (this.crosshair.y - this.frontendPlayers[socket.id].y))
@@ -524,9 +555,20 @@ class Deathmatch extends Phaser.Scene {
 
         if (id === socket.id) {
             this.playerAmmo = this.add.text(playerData.x, playerData.y + 750, '', { fontFamily: 'Arial', fontSize: 12, color: '#ffffff' });
-            this.weaponDetails = { fire_rate: playerData.firerate, ammo: playerData.bullets, reload: playerData.reload, radius: playerData.radius };
-            this.ammoFixed = playerData.bullets
-            this.gunAnimation()
+
+            this.weaponDetails = {
+                fire_rate: playerData.firerate,
+                ammo: playerData.bullets,
+                reload: playerData.reload,
+                radius: playerData.radius
+            };
+
+            this.ammo = playerData.bullets;
+            if (this.ammoFixed === undefined) {
+                this.ammoFixed = playerData.bullets;
+            }
+
+            this.gunAnimation();
         }
 
         this.weapon[id] = this.animationKeys[playerData.weaponId].name;
@@ -567,18 +609,21 @@ class Deathmatch extends Phaser.Scene {
 
         if (id === socket.id) {
             this.ammo = backendPlayer.bullets;
+            
             this.playerAmmo
                 .setPosition(backendPlayer.x, backendPlayer.y + 75)
                 .setText(`Ammo: ${this.ammo}/${this.ammoFixed}`)
                 .setOrigin(0.5)
                 .setScale(2);
         }
+
     }
 
     removePlayer(id) {
         
         if (id === socket.id && this.playerAmmo) {
             this.playerAmmo.destroy();
+            this.stopShooting();
         }
 
         if (this.frontendPlayers[id]) {
@@ -772,7 +817,7 @@ class Deathmatch extends Phaser.Scene {
 
     gameWon(username) {
         this.gameStop = true;
-
+        this.stopShooting();
         socket.off('updatePlayers');
         socket.off('updateProjectiles');
         socket.off('playerAnimationUpdate');
@@ -1016,7 +1061,6 @@ class Deathmatch extends Phaser.Scene {
         this.leaderboardText.setText(`LEADERBOARD\n${leaderboard}`);
 
     }
-
 
 }
 

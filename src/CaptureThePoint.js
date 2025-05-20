@@ -1,7 +1,7 @@
 /* global Phaser, socket */
 import SettingsButtonWithPanel from './options.js'
 
-class KingOfTheHill extends Phaser.Scene {
+class CaptureThePoint extends Phaser.Scene {
     // === Declare all multiplayer-related variables ===
     frontendPlayers = {}
     frontendWeapons = {}
@@ -26,7 +26,7 @@ class KingOfTheHill extends Phaser.Scene {
     grenades = { 5: 'smokeGrenade', 6: 'grenade' }
     explosions = { 5: 'smoke', 6: 'explosion' }
     playersAffected = {}
-    fallingObjects = []
+    //fallingObjects = []
     badgeEmojiMap = {
         no_reload: '🎯', close_call: '❤️‍🩹',
         unlock_all_weapons: '🔫', unlock_all_skins: '🧢',
@@ -37,7 +37,7 @@ class KingOfTheHill extends Phaser.Scene {
     captureMaxTime = 15
 
     constructor() {
-        super({ key: 'KingOfTheHill' })
+        super({ key: 'CaptureThePoint' })
     }
 
     init(data) {
@@ -192,12 +192,12 @@ class KingOfTheHill extends Phaser.Scene {
         const max = this.captureMaxTime;
 
         if (!holderId) {
-            this.captureText.setText('Capture the hill!');
+            this.captureText.setText('Capture the point!');
             this.controlPoint.setFillStyle(0x888888, 0.4);
         } else {
             const name = this.playerUsername[holderId]?.text || 'Someone';
             const isYou = holderId === socket.id;
-            this.captureText.setText(`${name} is holding the hill`);
+            this.captureText.setText(`${name} is holding the point`);
             this.controlPoint.setFillStyle(isYou ? 0x00ff00 : 0xff0000, 0.4);
         }
 
@@ -412,26 +412,26 @@ class KingOfTheHill extends Phaser.Scene {
             }
         });
 
-        socket.on('updateFallingObjects', (fallingObjects) => {
-            for (const i in fallingObjects) {
-                if (this.fallingObjects[i]) {
-                    this.fallingObjects[i].setPosition(fallingObjects[i].x, fallingObjects[i].y);
-                } else {
-                    const object = this.physics.add.image(
-                        fallingObjects[i].x,
-                        fallingObjects[i].y,
-                        'wall'
-                    ).setScale(2);
-                    this.fallingObjects[i] = object;
-                }
-            }
-            for (const id in this.fallingObjects) {
-                if (!fallingObjects.hasOwnProperty(id)) {
-                    this.fallingObjects[id].destroy();
-                    delete this.fallingObjects[id];
-                }
-            }
-        })
+        // socket.on('updateFallingObjects', (fallingObjects) => {
+        //     for (const i in fallingObjects) {
+        //         if (this.fallingObjects[i]) {
+        //             this.fallingObjects[i].setPosition(fallingObjects[i].x, fallingObjects[i].y);
+        //         } else {
+        //             const object = this.physics.add.image(
+        //                 fallingObjects[i].x,
+        //                 fallingObjects[i].y,
+        //                 'wall'
+        //             ).setScale(2);
+        //             this.fallingObjects[i] = object;
+        //         }
+        //     }
+        //     for (const id in this.fallingObjects) {
+        //         if (!fallingObjects.hasOwnProperty(id)) {
+        //             this.fallingObjects[id].destroy();
+        //             delete this.fallingObjects[id];
+        //         }
+        //     }
+        // })
 
         socket.on('removeKilledPlayer', ({ victimId, killerId }) => {
             const getDisplayName = (id) => {
@@ -725,7 +725,7 @@ class KingOfTheHill extends Phaser.Scene {
         this.updateCrosshairPosition();
         this.isInSmoke();
         this.isInGrenade();
-        this.onObject();
+        //this.onObject();
     }
 
     updatePlayerMovement() {
@@ -1047,15 +1047,15 @@ class KingOfTheHill extends Phaser.Scene {
         }
     }
 
-    onObject() {
-        if (this.fallingObjects && this.frontendPlayers[socket.id]) {
-            this.fallingObjects.forEach(object => {
-                if (this.physics.overlap(this.frontendPlayers[socket.id], object)) {
-                    socket.emit('detect', this.multiplayerId, socket.id)
-                }
-            });
-        }
-    }
+    // onObject() {
+    //     if (this.fallingObjects && this.frontendPlayers[socket.id]) {
+    //         this.fallingObjects.forEach(object => {
+    //             if (this.physics.overlap(this.frontendPlayers[socket.id], object)) {
+    //                 socket.emit('detect', this.multiplayerId, socket.id)
+    //             }
+    //         });
+    //     }
+    // }
 
     getSkinTextureKey(skinId, weaponId) {
         const skinMap = {
@@ -1103,4 +1103,4 @@ class KingOfTheHill extends Phaser.Scene {
 
 }
 
-export default KingOfTheHill;
+export default CaptureThePoint;

@@ -25,7 +25,7 @@ class Room extends Phaser.Scene {
     gamemodes = [
     'last_man_standing',
     'deathmatch',
-    'king_of_the_hill'
+    'capture_the_point'
     ];
 
     selectedGamemodeIndex = 0;
@@ -128,7 +128,7 @@ class Room extends Phaser.Scene {
             const sceneMap = {
                 deathmatch: 'Deathmatch',
                 last_man_standing: 'Multiplayer',
-                king_of_the_hill: 'KingOfTheHill'
+                capture_the_point: 'CaptureThePoint'
             };
 
             const sceneToStart = sceneMap[this.gamemode] || 'Multiplayer';

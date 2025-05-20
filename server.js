@@ -9,7 +9,7 @@ const io = new Server(server, {pingInterval: 2000, pingTimeout: 7000});
 const bodyParser = require('body-parser')
 const { Pool } = require('pg');
 const nodemailer = require('nodemailer')
-const crypto = require('crypto')
+const crypto = require('crypto');
 const stripe = require('stripe')('sk_test_51PJtjWP7nzuSu7T74zo0oHgD8swBsZMkud51DKwRHzgza3bPnRcHppcxfiqIiLhU35brBlqe3gJgjEv3NkU31GWb00dKn9t344');
 
 
@@ -70,6 +70,7 @@ const availableWeapons = {}
 const availableGrenades = {}
 const token = {}
 const kothState = {};
+const explosiveBarrels = {};
 
 app.post('/create-payment-intent', async (req, res) => {
     const { amount, username } = req.body;
@@ -1404,7 +1405,7 @@ function startGame(multiplayerId) {
           await updateProgress(username, 'play_match', 1);
           await updateProgress(username, 'play_games', 1);
 
-          if (rooms[multiplayerId]?.gamemode === 'king_of_the_hill') {
+          if (rooms[multiplayerId]?.gamemode === 'capture_the_point') {
             const mapSize = rooms[multiplayerId]?.maxPlayers * 250;
             kothState[multiplayerId] = {
                 zone: {
@@ -1427,6 +1428,34 @@ function startGame(multiplayerId) {
 
       const fallingObjectsIntervals = initFallingObjects(multiplayerId);
       rooms[multiplayerId].fallingObjectsIntervals = fallingObjectsIntervals;
+
+      //if (rooms[multiplayerId].gamemode === 'deathmatch') {
+          for (const id in explosiveBarrels) {
+              if (explosiveBarrels[id].multiplayerId === multiplayerId) {
+                  delete explosiveBarrels[id];
+              }
+          }
+
+          const mapSize = rooms[multiplayerId].maxPlayers * 250;
+          const safeMargin = 200;
+          for (let i = 1; i <= 4; i++) {
+              const x = Math.floor(Math.random() * ((1920 + mapSize) - 2 * safeMargin)) + safeMargin;
+              const y = Math.floor(Math.random() * ((1080 + mapSize) - 2 * safeMargin)) + safeMargin;
+
+              explosiveBarrels[`barrel_${multiplayerId}_${i}`] = {
+                  id: `barrel_${multiplayerId}_${i}`,
+                  x,
+                  y,
+                  exploded: false,
+                  multiplayerId
+              };
+              console.log("creatina barreli: ", multiplayerId)
+          }
+          setTimeout(() => {
+              io.to(multiplayerId).emit('spawnExplosiveBarrels', explosiveBarrels);
+          }, 500);
+
+     // }
 
     } 
 }
@@ -1630,6 +1659,9 @@ async function updateProgress(username, type, amount) {
 
       // Hide the player and start countdown
       backendPlayers[playerId].x = -9999;
+      backendPlayers[playerId].health = 0;
+      backendPlayers[playerId].bullets = 0;
+      backendPlayers[playerId].grenades = 0;
       socket.emit('startRespawnCountdown', { seconds: 3, killerUsername });
 
       let remaining = 3;
@@ -1664,7 +1696,7 @@ async function updateProgress(username, type, amount) {
                   _isDead: false
               };
 
-              if (rooms[multiplayerId]?.gamemode === 'king_of_the_hill') {
+              if (rooms[multiplayerId]?.gamemode === 'capture_the_point') {
                   if (!kothState[multiplayerId].controlTime[playerId]) {
                       kothState[multiplayerId].controlTime[playerId] = 0;
                   }
@@ -2276,6 +2308,77 @@ setInterval(async () => {
                 break;
             }
         }
+
+        for (const barrelId in explosiveBarrels) {
+            const barrel = explosiveBarrels[barrelId];
+            if (barrel.exploded) continue;
+            if (!backendProjectiles[id]) continue;
+
+            const dx = backendProjectiles[id].x - barrel.x;
+            const dy = backendProjectiles[id].y - barrel.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < 40) {
+                barrel.exploded = true;
+                io.to(barrel.multiplayerId).emit('barrelExploded', {
+                    id: barrelId,
+                    x: barrel.x,
+                    y: barrel.y
+                });
+
+                for (const playerId in backendPlayers) {
+                    const player = backendPlayers[playerId];
+                    if (player.multiplayerId !== barrel.multiplayerId || player._isDead) continue;
+
+                    const pdx = player.x - barrel.x;
+                    const pdy = player.y - barrel.y;
+                    const playerDist = Math.sqrt(pdx * pdx + pdy * pdy);
+
+                    const BARREL_RADIUS = 200;
+                    const BARREL_DAMAGE = 500;
+
+                    if (playerDist <= BARREL_RADIUS) {
+                        player.health = Math.max(0, player.health - BARREL_DAMAGE);
+
+                        const barrelShooter = backendProjectiles[id]?.playerId || null;
+
+                        if (player.health <= 0 && !player._isDead) {
+                            player._isDead = true;
+
+                            const isSuicide = barrelShooter === playerId;
+
+                            const killerId = isSuicide ? playerId : barrelShooter;
+
+                            io.to(barrel.multiplayerId).emit('removeKilledPlayer', {
+                                killerId,
+                                victimId: playerId
+                            });
+
+                            
+
+                            if (!isSuicide && backendPlayers[killerId]) {
+                                backendPlayers[killerId].kills = (backendPlayers[killerId].kills || 0) + 1;
+
+                                const client = await sql.connect();
+                                const killerName = backendPlayers[killerId].username;
+                                await client.query(`UPDATE user_profile SET coins = coins + 1, xp = xp + 5 WHERE user_name = $1`, [killerName]);
+                                client.release();
+                            }
+
+                            if (rooms[barrel.multiplayerId]?.gamemode === 'deathmatch') {
+                                const killerUsername = backendPlayers[killerId]?.username || 'barrel explosion';
+                                respawnPlayer(io.sockets.sockets.get(playerId), killerUsername);
+                            } else {
+                                delete backendPlayers[playerId];
+                            }
+                        }
+                    }
+                }
+
+                delete backendProjectiles[id];
+                break;
+            }
+        }
     }
 
     for (const id in backendGrenades) {
@@ -2313,7 +2416,7 @@ setInterval(async () => {
 
     for (const multiplayerId in kothState) {
         const room = rooms[multiplayerId];
-        if (!room || room.gamemode !== 'king_of_the_hill') continue;
+        if (!room || room.gamemode !== 'capture_the_point') continue;
 
         const koth = kothState[multiplayerId];
         const players = filterPlayersByMultiplayerId(multiplayerId);
