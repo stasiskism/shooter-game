@@ -40,6 +40,15 @@ class Room extends Phaser.Scene {
       speed_demon: '⚡',
       no_damage: '🧹'
     };
+
+    mapOptions = ['map1', 'map2', 'random', 'vote_map'];
+    selectedMapIndex = 0;
+    selectedMap = 'map1';
+    mapText = null;
+    votingInProgress = false;
+    voteTimeout = null;
+    totalPlayers = 0;
+    playerVotes = new Set();
     
     constructor() {
         super({ key: 'room'});
@@ -49,6 +58,8 @@ class Room extends Phaser.Scene {
         this.mapSize = data.mapSize
         this.gamemode = data.gamemode || 'last_man_standing';
         this.hostId = data.hostId;
+        this.selectedMap = data.map || 'map1';
+        this.selectedMapIndex = this.mapOptions.indexOf(this.selectedMap);
     }
     preload() {
         this.graphics = this.add.graphics()
@@ -89,6 +100,7 @@ class Room extends Phaser.Scene {
             this.selectedGamemodeIndex = this.gamemodes.indexOf(gamemode);
             this.hostId = hostId;
             this.initGamemodeUI();
+            this.initMapUI();
         });
 
         socket.on('roomJoinFailed', errorMessage => {
@@ -122,6 +134,8 @@ class Room extends Phaser.Scene {
                 }
             }
 
+            this.totalPlayers = Object.keys(roomPlayers).length;
+
         });
 
         socket.on('countdownEnd', () => {
@@ -135,7 +149,8 @@ class Room extends Phaser.Scene {
             this.scene.start(sceneToStart, {
                 multiplayerId: this.roomId,
                 mapSize: this.mapSize,
-                gamemode: this.gamemode
+                gamemode: this.gamemode,
+                map: this.selectedMap
             });
             this.scene.stop();
 
@@ -192,7 +207,54 @@ class Room extends Phaser.Scene {
             this.updateSkinDisplay();
         });
           
-        this.registerGamemodeSocketEvents();
+        socket.on('roomGamemode', (gamemode) => {
+            this.gamemode = gamemode;
+            this.selectedGamemodeIndex = this.gamemodes.indexOf(gamemode);
+            this.updateGamemodeDisplay();
+        });
+
+        socket.on('mapVoteUpdate', (voteData) => {
+            console.log('[mapVoteUpdate]', voteData, 'Total players:', this.totalPlayers);
+            
+            this.mapVoteCounts = voteData;
+
+            if (!this.voteButtons || !Array.isArray(this.voteButtons)) return;
+
+            // Update each voteCountText based on matching mapKey
+            console.log('[mapVoteUpdate]', voteData, 'Buttons:', this.voteButtons);
+            if (!this.voteButtons) return;
+            this.voteButtons.forEach((button, index) => {
+                if (!button || !button.voteCountText) {
+                    console.warn(`Missing voteCountText on button ${index}`, button);
+                } else {
+                    const count = voteData[button.mapKey] || 0;
+                    console.log(`Setting vote count for ${button.mapKey} to ${count}`);
+                    button.voteCountText.setText(`Votes: ${count}`);
+                    
+                    // 🔧 Force redraw
+                    button.voteCountText.setVisible(false);
+                    button.voteCountText.setVisible(true);
+                }
+            });
+
+            const totalVotes = Object.values(voteData).reduce((sum, v) => sum + v, 0);
+            if (totalVotes >= this.totalPlayers && !this.finishedVotingCalled) {
+                this.finishedVotingCalled = true;
+                this.finishVoting();
+            }
+        });
+
+        socket.on('startMapVoting', () => {
+            this.initMapVotingUI();
+        });
+
+        socket.on('roomMap', (mapKey) => {
+            console.log(`[roomMap] Map selected: ${mapKey}`);
+            this.selectedMap = mapKey;
+            this.selectedMapIndex = this.mapOptions.indexOf(mapKey);
+            this.updateMapDisplay();
+            this.destroyMapVotingUI();  // Will clean up vote UI
+        });
     }
 
     setupScene() {
@@ -251,14 +313,18 @@ class Room extends Phaser.Scene {
             exitNoButton.addEventListener('click', handleExitNo);
         })
 
-        this.readyButton = this.add.sprite(1920 / 2, (1080 / 2) - 300, 'ready')
-        this.readyButton.setInteractive({useHandCursor: true})
-        this.readyButton.on('pointerover', () => this.readyButton.setTint(0xf1c40f));
-        this.readyButton.on('pointerout', () => this.readyButton.clearTint()); 
-        this.readyButton.on('pointerdown', () => {
+        this.readyButton = this.add.sprite(this.centerX, this.centerY - 200, 'ready')
+        .setInteractive({ useHandCursor: true })
+        .on('pointerover', () => this.readyButton.setTint(0xf1c40f))
+        .on('pointerout', () => this.readyButton.clearTint())
+        .on('pointerdown', () => {
             let isReady = !this.readyPlayers[socket.id];
-            this.readyPlayers[socket.id] = isReady
-            socket.emit('updateReadyState', { playerId: socket.id, isReady, roomId: this.roomId });
+            this.readyPlayers[socket.id] = isReady;
+            socket.emit('updateReadyState', {
+                playerId: socket.id,
+                isReady,
+                roomId: this.roomId
+            });
         });
 
         this.readyPlayersText = this.add.text(1920 / 2, (1080 / 2) - 500, `READY PLAYERS: 0`, {
@@ -611,7 +677,7 @@ class Room extends Phaser.Scene {
         for (const playerId in this.readyPlayers) {
            count++
         }
-        if (count === this.readyPlayersCount && count > 0) { // > 1
+        if (count === this.readyPlayersCount && count > 0 && !this.votingInProgress) { // > 1
             this.readyButton.destroy()
             this.countdownText = this.add.text(800, 200, '', { fontSize: '64px', fill: '#fff' });
             this.countdownText.setOrigin(0.5);
@@ -719,14 +785,157 @@ class Room extends Phaser.Scene {
         });
       }
 
-      registerGamemodeSocketEvents() {
-        socket.on('roomGamemode', (gamemode) => {
-            this.gamemode = gamemode;
-            this.selectedGamemodeIndex = this.gamemodes.indexOf(gamemode);
-            this.updateGamemodeDisplay();
-        });
-      }
+      initMapUI() {
+        const mapTextY = this.centerY - 300;
 
+        this.mapText = this.add.text(this.centerX, mapTextY, `Map: ${this.formatMapName(this.selectedMap)}`, {
+            fontFamily: 'Berlin Sans FB Demi',
+            fontSize: '32px',
+            fill: '#ffffff'
+        }).setOrigin(0.5).setScale(2);
+
+        const buttonOffsetX = 500;
+
+        if (socket.id === this.hostId) {
+            this.previousMapButton = this.add.sprite(this.centerX - buttonOffsetX, mapTextY, 'previousButton')
+                .setScale(0.2)
+                .setInteractive({ useHandCursor: true })
+                .setScrollFactor(0)
+                .setDepth(1);
+
+            this.nextMapButton = this.add.sprite(this.centerX + buttonOffsetX, mapTextY, 'nextButton')
+                .setScale(0.2)
+                .setInteractive({ useHandCursor: true })
+                .setScrollFactor(0)
+                .setDepth(1);
+
+            this.previousMapButton.on('pointerdown', () => {
+                if (this.scene.key !== 'room') return;
+                this.handleMapChange(-1);
+            });
+
+            this.nextMapButton.on('pointerdown', () => {
+                if (this.scene.key !== 'room') return;
+                this.handleMapChange(1);
+            });
+        }
+    }
+
+    handleMapChange(direction) {
+        const totalMaps = this.mapOptions.length;
+        this.selectedMapIndex = (this.selectedMapIndex + direction + totalMaps) % totalMaps;
+        this.selectedMap = this.mapOptions[this.selectedMapIndex];
+        this.updateMapDisplay();
+
+        socket.emit('updateMap', {
+            roomId: this.roomId,
+            map: this.selectedMap
+        });
+    }
+
+    updateMapDisplay() {
+        if (this.mapText) {
+            this.mapText.setText(`Map: ${this.formatMapName(this.selectedMap)}`);
+        }
+        if (this.selectedMap === 'vote_map') {
+            socket.emit('startVoting', { roomId: this.roomId });
+        } else {
+            this.destroyMapVotingUI();
+        }
+    }
+
+    formatMapName(mapKey) {
+        if (mapKey === 'random') return 'Random Map';
+        return mapKey.replace(/map/, 'Map ');
+    }
+
+    initMapVotingUI() {
+        this.finishedVotingCalled = false;
+        this.votingInProgress = true;
+        this.mapVoteCounts = { map1: 0, map2: 0, random: 0 };
+        this.playerVoted = false;
+        this.playerVotes = new Set();
+        this.voteButtons = [];
+
+        const voteOptions = ['map1', 'map2', 'random'];
+        let startX = this.centerX - 300;
+        const spacing = 300;
+
+        voteOptions.forEach((mapKey, index) => {
+            const btn = this.add.text(startX + spacing * index, this.centerY, this.formatMapName(mapKey), {
+                fontSize: '28px',
+                fill: '#fff',
+                backgroundColor: '#000',
+                padding: { x: 10, y: 5 },
+            }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+            const voteCountText = this.add.text(startX + spacing * index, this.centerY + 50, `Votes: 0`, {
+                fontSize: '22px',
+                fill: '#ff0'
+            }).setOrigin(0.5);
+
+            btn.on('pointerdown', () => {
+                if (this.playerVoted) return;
+                this.playerVoted = true;
+                this.playerVotes.add(socket.id);
+                socket.emit('mapVote', { roomId: this.roomId, map: mapKey });
+                if (!this.voteButtons) return;
+                if (this.voteButtons) {
+                this.voteButtons.forEach(button => {
+                    if (button?.btn) {
+                    button.btn.disableInteractive().setAlpha(0.5);
+                    }
+                });
+                }
+            });
+
+            this.voteButtons.push({ btn, voteCountText, mapKey });
+        });
+
+    }
+
+    finishVoting() {
+        console.log('[finishVoting] Triggered');
+        this.votingInProgress = false;
+
+        if (this.voteTimeout) {
+            this.voteTimeout.remove(false);
+            this.voteTimeout = null;
+        }
+
+        let maxVotes = -1;
+        let selected = 'map1'; 
+
+        for (const map in this.mapVoteCounts) {
+            if (this.mapVoteCounts[map] > maxVotes) {
+                maxVotes = this.mapVoteCounts[map];
+                selected = map;
+            }
+        }
+
+        socket.emit('updateMap', {
+            roomId: this.roomId,
+            map: selected
+        });
+
+        this.destroyMapVotingUI();
+    }
+
+    destroyMapVotingUI() {
+        console.log('[destroyMapVotingUI] Destroying vote UI');
+        if (!this.voteButtons || !Array.isArray(this.voteButtons)) return;
+
+         this.voteButtons.forEach(button => {
+            button?.btn?.destroy();
+            button?.voteCountText?.destroy();
+        });
+
+        this.voteButtons = null;
+        this.mapVoteCounts = null;
+        this.playerVoted = false;
+        this.votingInProgress = false;
+        this.finishedVotingCalled = false;
+    }
 
 }
 

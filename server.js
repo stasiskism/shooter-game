@@ -71,6 +71,8 @@ const availableGrenades = {}
 const token = {}
 const kothState = {};
 const explosiveBarrels = {};
+const mapVotes = {};
+const votedPlayers = {};
 
 app.post('/create-payment-intent', async (req, res) => {
     const { amount, username } = req.body;
@@ -294,7 +296,8 @@ io.on('connection', (socket) => {
             maxPlayers,
             isPrivate,
             password: isPrivate ? password : null,
-            gamemode: 'last_man_standing'
+            gamemode: 'last_man_standing',
+            map: 'map1'
         };
         const mapSize = 250 * maxPlayers;
         console.log('Created roomId:', roomId);
@@ -316,7 +319,8 @@ io.on('connection', (socket) => {
                 roomId,
                 gamemode: room.gamemode || 'last_man_standing',
                 hostId: room.host,
-                mapSize: 250 * room.maxPlayers
+                mapSize: 250 * room.maxPlayers,
+                map: room.map || 'map1'
             });
         } else {
             socket.emit('roomJoinFailed', 'Room is full, does not exist, or password is incorrect');
@@ -331,7 +335,8 @@ io.on('connection', (socket) => {
                     roomId,
                     gamemode: rooms[roomId].gamemode || 'last_man_standing',
                     hostId: rooms[roomId].host,
-                    mapSize: 250 * rooms[roomId].maxPlayers
+                    mapSize: 250 * rooms[roomId].maxPlayers,
+                    map: rooms[roomId].map || 'map1'
                 });
             } else {
                 socket.emit('roomJoinFailed', 'There are no rooms available')
@@ -397,7 +402,8 @@ io.on('connection', (socket) => {
                     roomId,
                     gamemode: rooms[roomId].gamemode || 'last_man_standing',
                     hostId: rooms[roomId].host,
-                    mapSize: 250 * rooms[roomId].maxPlayers
+                    mapSize: 250 * rooms[roomId].maxPlayers,
+                    map: rooms[roomId].map
                 });
 
                 socket.emit('roomGamemode', rooms[roomId].gamemode || 'last_man_standing');
@@ -765,6 +771,8 @@ io.on('connection', (socket) => {
             }
             socket.leave(roomId);
             delete readyPlayers[socket.id];
+            delete mapVotes[roomId];
+            delete votedPlayers[roomId];
             break;
         }
     }
@@ -1252,8 +1260,52 @@ io.on('connection', (socket) => {
         }
       });
 
+      socket.on('updateMap', ({ roomId, map }) => {
+          if (rooms[roomId] && socket.id === rooms[roomId].host) {
+              rooms[roomId].map = map;
+              io.to(roomId).emit('roomMap', map);
+          }
+      });
 
-      
+      socket.on('mapVote', ({ roomId, map }) => {
+          const room = rooms[roomId];
+          if (!room || !room.isVoting) return;
+
+          if (!room.votedPlayers) room.votedPlayers = new Set();
+          if (room.votedPlayers.has(socket.id)) return;
+
+          if (!['map1', 'map2', 'random'].includes(map)) return;
+
+          if (!room.voteCounts[map]) {
+              room.voteCounts[map] = 0;
+          }
+
+          room.voteCounts[map]++;
+          room.votedPlayers.add(socket.id);
+
+          io.to(roomId).emit('mapVoteUpdate', room.voteCounts);
+
+          if (room.votedPlayers.size === room.players.length) {
+              finishVoting(roomId);
+          }
+      });
+
+
+      socket.on('startVoting', ({ roomId }) => {
+          if (!rooms[roomId]) return;
+
+          rooms[roomId].voteCounts = { map1: 0, map2: 0, random: 0 };
+          rooms[roomId].votedPlayers = new Set();
+          rooms[roomId].isVoting = true;
+
+          io.to(roomId).emit('startMapVoting');
+
+
+          setTimeout(() => {
+              finishVoting(roomId);
+          }, 10000);
+      });
+ 
 });
 
 function calculateReadyPlayers(readyPlayers) {
@@ -1363,6 +1415,7 @@ function startGame(multiplayerId) {
           const j = Math.floor(Math.random() * (i + 1));
           [corners[i], corners[j]] = [corners[j], corners[i]];
       }
+      const selectedMap = rooms[multiplayerId]?.map || 'map1';
       playersInRoom.forEach(async(player, index) => {
           const id = player.id
           const username = playerUsername[id];
@@ -1707,7 +1760,27 @@ async function updateProgress(username, type, amount) {
       }, 1000);
   }
 
-  
+  function finishVoting(roomId) {
+    const room = rooms[roomId];
+    if (!room || !room.isVoting) return;
+
+    room.isVoting = false;
+
+    let maxVotes = -1;
+    let selectedMap = 'map1';
+
+    for (const [map, count] of Object.entries(room.voteCounts)) {
+        if (count > maxVotes) {
+            maxVotes = count;
+            selectedMap = map;
+        }
+    }
+
+    io.to(roomId).emit('roomMap', selectedMap);
+
+    delete room.voteCounts;
+    delete room.votedPlayers;
+}
 
 
 app.get('/get-info', async (req, res) => {

@@ -222,8 +222,8 @@ class Lobby extends Phaser.Scene {
 
         socket.emit('checkRoom', {roomId});
 
-        socket.once('roomJoined', ({ roomId, gamemode, hostId, mapSize }) => {
-            this.scene.start('room', { roomId, gamemode, hostId, mapSize });
+        socket.once('roomJoined', ({ roomId, gamemode, hostId, mapSize, map }) => {
+            this.scene.start('room', { roomId, gamemode, hostId, mapSize, map });
             this.scene.stop();
         });
 
@@ -240,11 +240,11 @@ class Lobby extends Phaser.Scene {
         this.searchBox.setVisible(true);
         this.continueSearching = true;
 
-        const handleRoomJoined = ({ roomId, gamemode, hostId, mapSize }) => {
+        const handleRoomJoined = ({ roomId, gamemode, hostId, mapSize, map }) => {
             if (!this.continueSearching) return;
             this.searchBox.setVisible(false);
             this.continueSearching = false;
-            this.scene.start('room', { roomId, gamemode, hostId, mapSize });
+            this.scene.start('room', { roomId, gamemode, hostId, mapSize, map });
             this.scene.stop();
             cleanupEventListeners();
             hideSearchPrompt();
@@ -401,8 +401,8 @@ class Lobby extends Phaser.Scene {
         joinButton.addEventListener('click', handleJoin);
         cancelButton.addEventListener('click', cleanup);
 
-        socket.once('roomJoined', ({ roomId, gamemode, hostId, mapSize }) => {
-            this.scene.start('room', { roomId, gamemode, hostId, mapSize });
+        socket.once('roomJoined', ({ roomId, gamemode, hostId, mapSize, map }) => {
+            this.scene.start('room', { roomId, gamemode, hostId, mapSize, map });
             this.scene.stop();
         });
 
