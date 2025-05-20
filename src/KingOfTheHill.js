@@ -1,7 +1,8 @@
-/* global Phaser, socket */ 
+/* global Phaser, socket */
 import SettingsButtonWithPanel from './options.js'
 
-class Multiplayer extends Phaser.Scene {
+class KingOfTheHill extends Phaser.Scene {
+    // === Declare all multiplayer-related variables ===
     frontendPlayers = {}
     frontendWeapons = {}
     frontendProjectiles = {}
@@ -22,39 +23,31 @@ class Multiplayer extends Phaser.Scene {
         3: { name: 'AR', startShoot: 0, endShoot: 15, startReload: 0, endReload: 15 },
         4: { name: 'Sniper', startShoot: 0, endShoot: 43, startReload: 0, endReload: 27 },
     }
-    grenades = {
-        5: 'smokeGrenade',
-        6: 'grenade'
-    }
-    explosions = {
-        5: 'smoke',
-        6: 'explosion'
-    }
+    grenades = { 5: 'smokeGrenade', 6: 'grenade' }
+    explosions = { 5: 'smoke', 6: 'explosion' }
     playersAffected = {}
     fallingObjects = []
-
     badgeEmojiMap = {
-      no_reload: '🎯',
-      close_call: '❤️‍🩹',
-      unlock_all_weapons: '🔫',
-      unlock_all_skins: '🧢',
-      speed_demon: '⚡',
-      no_damage: '🧹'
-    };
-
+        no_reload: '🎯', close_call: '❤️‍🩹',
+        unlock_all_weapons: '🔫', unlock_all_skins: '🧢',
+        speed_demon: '⚡', no_damage: '🧹'
+    }
+    captureHolder = null
+    controlTime = {}
+    captureMaxTime = 15
 
     constructor() {
-        super({ key: 'Multiplayer' });
+        super({ key: 'KingOfTheHill' })
     }
 
     init(data) {
         this.cameras.main.setBackgroundColor('#000000');
-        this.multiplayerId = data.multiplayerId
-        this.mapSize = data.mapSize
+        this.multiplayerId = data.multiplayerId;
+        this.mapSize = data.mapSize;
     }
 
     preload() {
-        this.graphics = this.add.graphics()
+        this.graphics = this.add.graphics();
         for (let i = 3; i <= 21; i++) {
             this.load.image(`explosion_${i}`, `assets/Explosion/1_${i}.png`)
         }
@@ -65,80 +58,170 @@ class Multiplayer extends Phaser.Scene {
         this.setupScene();
         this.setupMap();
         this.setupInputEvents();
+        this.setupCaptureZone();
+        this.setupKoTHSocketEvents();
+
         this.settingsButton = new SettingsButtonWithPanel(this, 1890, 90);
         this.events.on('settingsPanelOpened', this.onSettingsPanelOpened, this);
+
         this.damageOverlay = this.add.rectangle(0, 0, 3000, 3000, 0xff0000)
-            .setOrigin(0)
-            .setAlpha(0)
-            .setDepth(9999);
-        this.reloadIndicator = this.add.graphics();
-        this.reloadIndicator.setDepth(999);
-        this.reloadIndicator.setVisible(false);
+            .setOrigin(0).setAlpha(0).setDepth(9999);
+
+        this.reloadIndicator = this.add.graphics().setDepth(999).setVisible(false);
+        
+        this.killFeed = this.add.group();
+        this.killCounts = {};
+
         this.leaderboardText = this.add.text(20, 100, '', {
-            fontFamily: 'Arial',
-            fontSize: '24px',
-            color: '#ffffff',
-            stroke: '#000000',
-            strokeThickness: 3
+            fontFamily: 'Arial', fontSize: '24px',
+            color: '#ffffff', stroke: '#000000', strokeThickness: 3
         }).setScrollFactor(0).setDepth(999);
+
+        
     }
-    
-    onSettingsPanelOpened(panelVisible) {
-        this.isPanelVisible = panelVisible;
-        if (panelVisible) {
-            this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.W);
-            this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.A);
-            this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.S);
-            this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.D);
-            this.input.mouse.releasePointerLock();
+
+    setupCaptureZone() {
+        const mapSize = this.mapSize || 0;
+        const centerX = 1920 / 2 + mapSize / 2;
+        const centerY = 1080 / 2 + mapSize / 2;
+        const radius = 200;
+
+        this.controlPoint = this.add.circle(centerX, centerY, radius, 0x888888, 0.4);
+        this.physicsZone = this.add.zone(centerX, centerY, radius * 2, radius * 2);
+        this.physics.world.enable(this.physicsZone);
+        this.physicsZone.body.setAllowGravity(false);
+
+        this.captureText = this.add.text(960, 80, '', {
+            fontSize: '28px',
+            fontFamily: 'Arial',
+            color: '#ffffff',
+            backgroundColor: '#000000',
+            padding: { x: 12, y: 6 },
+            align: 'center'
+        }).setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(999);
+
+        this.progressBar = this.add.graphics()
+            .setScrollFactor(0)
+            .setDepth(999);
+    }
+
+    setupKoTHSocketEvents() {
+        socket.on('kothUpdate', data => {
+            this.captureHolder = data.holder;
+            this.controlTime = data.controlTime || {};
+            this.updateKoTHUI();
+        });
+
+        socket.on('startRespawnCountdown', ({ killerUsername }) => {
+            if (this.isRespawning || this.gameStop) return;
+            this.isRespawning = true;
+            this.removePlayer(socket.id);
+
+            this.input.keyboard.enabled = false;
+            this.input.mouse.enabled = false;
+
+            const width = this.cameras.main.width;
+            const height = this.cameras.main.height;
+
+            this.deathOverlay = this.add.rectangle(0, 0, 3000, 3000, 0x000000)
+                .setOrigin(0)
+                .setAlpha(0.6)
+                .setDepth(998);
+
+            const killedByText = this.add.text(width / 2, height / 2 - 100, `You were killed by ${killerUsername}`, {
+                fontFamily: 'Arial',
+                fontSize: 32,
+                color: '#ff4c4c'
+            }).setOrigin(0.5).setDepth(1000).setScrollFactor(0);
+
+            const countdownText = this.add.text(width / 2, height / 2, 'Respawning in 3...', {
+                fontFamily: 'Arial',
+                fontSize: 48,
+                color: '#ffffff'
+            }).setOrigin(0.5).setDepth(1000).setScrollFactor(0);
+
+            let timeLeft = 3;
+            this.time.addEvent({
+                delay: 1000,
+                repeat: 2,
+                callback: () => {
+                    timeLeft--;
+                    countdownText.setText(`Respawning in ${timeLeft}...`);
+
+                    if (timeLeft === 0) {
+                        countdownText.destroy();
+                        killedByText.destroy();
+                        this.deathOverlay.destroy();
+
+                        this.input.keyboard.enabled = true;
+                        this.input.mouse.enabled = true;
+
+                        if (this.playerAmmo) this.playerAmmo.setVisible(true);
+                        if (this.playerHealth[socket.id]?.container) {
+                            this.playerHealth[socket.id].container.setVisible(true);
+                        }
+
+                        this.isRespawning = false;
+                        this.w.reset();
+                        this.a.reset();
+                        this.s.reset();
+                        this.d.reset();
+                    }
+                }
+            });
+        });
+
+
+        socket.on('gameWon', winnerUsername => {
+            this.gameWon(winnerUsername)
+        });
+
+        this.events.on('shutdown', this.shutdown, this);
+    }
+
+    shutdown() {
+        socket.off('kothUpdate');
+        socket.off('gameWon');
+    }
+
+    updateKoTHUI() {
+        const holderId = this.captureHolder;
+        const time = this.controlTime?.[holderId] || 0;
+        const max = this.captureMaxTime;
+
+        if (!holderId) {
+            this.captureText.setText('Capture the hill!');
+            this.controlPoint.setFillStyle(0x888888, 0.4);
         } else {
-            this.input.mouse.requestPointerLock();
-            this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.W);
-            this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.A);
-            this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.S);
-            this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.D);
+            const name = this.playerUsername[holderId]?.text || 'Someone';
+            const isYou = holderId === socket.id;
+            this.captureText.setText(`${name} is holding the hill`);
+            this.controlPoint.setFillStyle(isYou ? 0x00ff00 : 0xff0000, 0.4);
         }
+
+        const progress = time / max;
+
+        this.progressBar.clear();
+        const barWidth = 400;
+        const barHeight = 20;
+        const screenCenterX = this.cameras.main.width / 2;
+        const barX = screenCenterX - barWidth / 2;
+        const barY = 120;
+
+        this.progressBar.clear();
+        this.progressBar.fillStyle(0xffffff);
+        this.progressBar.fillRect(barX, barY, barWidth * progress, barHeight);
+        this.progressBar.lineStyle(2, 0xffffff);
+        this.progressBar.strokeRect(barX, barY, barWidth, barHeight);
     }
 
     setupMap() {
         const map1 = this.make.tilemap({ key: "map2", tileWidth: 32, tileHeight: 32 });
         const tileset1 = map1.addTilesetImage("Mapass", "tiles_multiplayer");
-        const layer1 = map1.createLayer("Tile Layer 1", tileset1, -2000, -1000).setScale(1);
+        map1.createLayer("Tile Layer 1", tileset1, -2000, -1000).setScale(1);
     }
-
-    gunAnimation() {
-        for (const weaponId in this.animationKeys) {
-            const weaponData = this.animationKeys[weaponId];
-            const weapon = weaponData.name;
-            const startShoot = weaponData.startShoot;
-            const endShoot = weaponData.endShoot;
-            const startReload = weaponData.startReload;
-            const endReload = weaponData.endReload;
-    
-            const reloadTime = this.weaponDetails.reload;
-            const reloadFrames = endReload - startReload + 1;
-            const reloadFrameRate = reloadFrames / (reloadTime / 1000);
-    
-            /*if (!this.anims.exists(`singleShot_${weapon}`)) {
-                this.anims.create({
-                    key: `singleShot_${weapon}`,
-                    frames: this.anims.generateFrameNumbers(`shoot${weapon}`, { start: startShoot, end: endShoot }),
-                    frameRate: 60,
-                    repeat: 0
-                });
-            }
-    
-            if (!this.anims.exists(`reloads_${weapon}`)) {
-                this.anims.create({
-                    key: `reloads_${weapon}`,
-                    frames: this.anims.generateFrameNumbers(`reload${weapon}`, { start: startReload, end: endReload }),
-                    frameRate: reloadFrameRate,
-                    repeat: 0
-                });
-            }*/
-        }
-    }
-    
 
     setupScene() {
         const centerX = this.cameras.main.width / 2;
@@ -293,18 +376,6 @@ class Multiplayer extends Phaser.Scene {
                 alivePlayers[id] = true;
             }
 
-            const alivePlayerCount = Object.keys(alivePlayers).length;
-            if (alivePlayerCount === 1) {
-                this.gameStop = true
-                const id = Object.keys(alivePlayers)[0]
-                this.gameWon(backendPlayers[id].username)
-                this.playerAmmo.destroy()
-                this.playerHealth[id].container.destroy()
-                this.playerUsername[id].destroy()
-                this.stopShooting()
-                socket.off('updatePlayers')
-            }
-
             for (const id in this.frontendPlayers) {
                 if (!alivePlayers[id]) {
                     this.removePlayer(id);
@@ -361,6 +432,44 @@ class Multiplayer extends Phaser.Scene {
                 }
             }
         })
+
+        socket.on('removeKilledPlayer', ({ victimId, killerId }) => {
+            const getDisplayName = (id) => {
+                const badge = this.badgeEmojiMap[this.frontendPlayers[id]?.badge] || '';
+                const name = this.frontendPlayers[id]?.username || 'Unknown';
+                return `${badge} ${name}`.trim();
+            };
+
+            const killerName = killerId ? getDisplayName(killerId) : 'The Void';
+            const victimName = getDisplayName(victimId);
+
+
+            const feedX = this.cameras.main.width - 40;
+            const feedY = 100 + this.killFeed.getLength() * 40;
+
+            const killText = this.add.text(feedX - 10, feedY,
+                `${killerName} → ${victimName}`, {
+                    fontFamily: 'Arial Black',
+                    fontSize: '28px',
+                    color: '#ffffff',
+                    stroke: '#000000',
+                    strokeThickness: 4,
+                    backgroundColor: 'transparent'
+                }).setOrigin(1, 0).setScrollFactor(0).setDepth(999);
+
+            this.killFeed.add(killText);
+            this.time.delayedCall(4000, () => killText.destroy());
+
+            if (killerId) {
+                if (!this.killCounts[killerId]) {
+                    this.killCounts[killerId] = 0;
+                }
+                this.killCounts[killerId]++;
+                this.updateLeaderboard();
+            }
+            this.removePlayer(victimId);
+        });
+
         if (!window.socketNotificationHandlersSet) {
             socket.on('achievementCompleted', ({ achievementId, title }) => {
                 console.log('Received achievementCompleted:', achievementId, title);
@@ -375,14 +484,6 @@ class Multiplayer extends Phaser.Scene {
             window.socketNotificationHandlersSet = true;
         }
 
-        /*socket.on('updateGunAnimation', (playerId, animation, weapon) => {
-            if (this.frontendWeapons[playerId]) {
-                this.frontendWeapons[playerId].anims.play(`${animation}_${weapon}`, true);
-                if (animation == 'singleShot') {
-                    this.sound.play(weapon + 'Sound', { volume: 0.5 });
-                }
-            }
-        }) */
     }
 
     startShooting(firerate) {
@@ -412,14 +513,14 @@ class Multiplayer extends Phaser.Scene {
     }
 
     showDamageFlash() {
-    if (!this.damageOverlay) return;
-    this.damageOverlay.setAlpha(0.4);
-    this.tweens.add({
-        targets: this.damageOverlay,
-        alpha: 0,
-        duration: 200,
-        ease: 'Power2'
-    });
+        if (!this.damageOverlay) return;
+        this.damageOverlay.setAlpha(0.4);
+        this.tweens.add({
+            targets: this.damageOverlay,
+            alpha: 0,
+            duration: 200,
+            ease: 'Power2'
+        });
     }
 
     setupPlayer(id, playerData) {
@@ -438,6 +539,8 @@ class Multiplayer extends Phaser.Scene {
         const badgeKey = playerData.badge || null;
         const badge = this.badgeEmojiMap?.[badgeKey] || '';
         const displayName = badge ? `${badge} ${playerData.username}` : playerData.username;
+        this.frontendPlayers[id].username = playerData.username;
+        this.frontendPlayers[id].badge = playerData.badge;
 
         this.playerUsername[id] = this.add.text(playerData.x, playerData.y - 50, displayName, {
             fontFamily: 'Berlin Sans FB Demi',
@@ -491,9 +594,6 @@ class Multiplayer extends Phaser.Scene {
             this.prevHealth = backendPlayer.health;
         }
 
-        const healthPercentage = backendPlayer.health / 100;
-        this.playerHealth[id].fg.scaleX = healthPercentage;
-
         const badgeKey = backendPlayer.badge || null;
         const badge = this.badgeEmojiMap?.[badgeKey] || '';
         const displayName = badge ? `${badge} ${backendPlayer.username}` : backendPlayer.username;
@@ -513,26 +613,38 @@ class Multiplayer extends Phaser.Scene {
                 .setScale(2);
         }
 
-}
+    }
 
     removePlayer(id) {
         if (id === socket.id && !this.gameStop) {
-            socket.removeAllListeners()
-            this.scene.stop('Multiplayer')
-            this.scene.start('respawn', { multiplayerId: this.multiplayerId, mapSize: this.mapSize})
-            this.playerAmmo.destroy()
-            delete this.weaponDetails
+            if (this.playerAmmo) this.playerAmmo.destroy();
+            delete this.weaponDetails;
         }
-        if (id === socket.id) {
-            this.playerAmmo.destroy()
+
+        if (this.frontendPlayers[id]) {
+            this.frontendPlayers[id].anims.stop();
+            this.frontendPlayers[id].destroy();
         }
-        this.frontendPlayers[id].anims.stop()
-        this.frontendPlayers[id].destroy();
-        this.frontendWeapons[id].destroy();
-        this.playerHealth[id].container.destroy();
-        this.playerUsername[id].destroy();
+
+        if (this.frontendWeapons[id]) {
+            this.frontendWeapons[id].destroy();
+        }
+
+        if (this.playerHealth[id]?.container) {
+            this.playerHealth[id].container.destroy();
+        }
+
+        if (this.playerUsername[id]) {
+            this.playerUsername[id].destroy();
+        }
+
         delete this.frontendPlayers[id];
+        delete this.frontendWeapons[id];
+        delete this.playerHealth[id];
+        delete this.playerUsername[id];
     }
+
+
 
     setupProjectile(playerId, id) {
         const weapon = this.frontendWeapons[playerId]
@@ -590,19 +702,30 @@ class Multiplayer extends Phaser.Scene {
         delete this.frontendGrenades[id]
     }
 
+    onSettingsPanelOpened(panelVisible) {
+        this.isPanelVisible = panelVisible;
+        if (panelVisible) {
+            this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.W);
+            this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.A);
+            this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.S);
+            this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.D);
+            this.input.mouse.releasePointerLock();
+        } else {
+            this.input.mouse.requestPointerLock();
+            this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.W);
+            this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.A);
+            this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.S);
+            this.input.keyboard.addCapture(Phaser.Input.Keyboard.KeyCodes.D);
+        }
+    }
+
     update() {
         this.updatePlayerMovement();
         this.updateCameraPosition();
         this.updateCrosshairPosition();
         this.isInSmoke();
-        this.isInGrenade()
+        this.isInGrenade();
         this.onObject();
-    }
-
-    removeFallingObject(object) {
-        socket.emit('removeFallingOject', object)
-        object.destroy();
-        this.fallingObjects = this.fallingObjects.filter(obj => obj !== object);
     }
 
     updatePlayerMovement() {
@@ -711,59 +834,51 @@ class Multiplayer extends Phaser.Scene {
         }
     }
 
-    // gameWon(username) {
-    //     socket.removeAllListeners()
-    //     this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
-    //     const winningText = this.add.text(
-    //         this.cameras.main.width / 2,
-    //         this.cameras.main.height / 2,
-    //         `${username} has won the game!`,
-    //         { fontFamily: 'Arial', fontSize: 48, color: '#ffffff' }
-    //     );
-
-    //     winningText.setOrigin(0.5);
-
-    //     socket.emit('gameWon', this.multiplayerId, username)
-
-    //     this.time.delayedCall(5000, () => {
-    //         for (const id in this.frontendPlayers) {
-    //             this.removePlayer(id);
-    //         }
-    //         for (const id in this.frontendGrenades) {
-    //             this.removeGrenade(id)
-    //         }
-    //         for (const id in this.frontendSmoke) {
-    //             delete this.frontendSmoke[id]
-    //         }
-    //         for (const id in this.frontendProjectiles) {
-    //             this.removeProjectile(id)
-    //         }
-    //         for (const id in this.darkOverlay) {
-    //             delete this.darkOverlay[id]
-    //         }
-    //         socket.emit('leaveRoom', this.multiplayerId)
-    //         this.scene.stop()
-    //         this.scene.start('lobby');
-    //     });
-    // }
-
     gameWon(username) {
-        // Remove only gameplay-related listeners
+        this.gameStop = true;
+
         socket.off('updatePlayers');
         socket.off('updateProjectiles');
-        socket.off('updateFallingObjects');
         socket.off('playerAnimationUpdate');
         socket.off('weaponStateUpdate');
-        
-        this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
-        const winningText = this.add.text(
-            this.cameras.main.width / 2,
-            this.cameras.main.height / 2,
-            `${username} has won the game!`,
-            { fontFamily: 'Arial', fontSize: 48, color: '#ffffff' }
-        );
+        socket.off('removeKilledPlayer');
+        socket.off('startRespawnCountdown');
+        socket.off('gameWon');
+        const screenCenterX = this.cameras.main.centerX;
+        const screenCenterY = this.cameras.main.centerY;
 
-        winningText.setOrigin(0.5);
+        this.add.text(
+            screenCenterX,
+            screenCenterY,
+            `${username} has won the game!`,
+            {
+                fontFamily: 'Arial',
+                fontSize: '48px',
+                color: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 5
+            }
+        ).setOrigin(0.5).setScrollFactor(0).setDepth(9999);
+
+        if (this.playerAmmo) this.playerAmmo.setVisible(false);
+        if (this.playerHealth[socket.id]?.container) this.playerHealth[socket.id].container.setVisible(false);
+
+        for (const id in this.frontendPlayers) this.removePlayer(id);
+        for (const id in this.frontendProjectiles) this.removeProjectile(id);
+        for (const id in this.frontendGrenades) this.removeGrenade(id);
+        for (const id in this.frontendSmoke) {
+            this.frontendSmoke[id].destroy();
+            delete this.frontendSmoke[id];
+        }
+        for (const id in this.frontendExplosion) {
+            this.frontendExplosion[id].destroy();
+            delete this.frontendExplosion[id];
+        }
+
+        for (const id in this.darkOverlay) {
+            this.darkOverlay[id].destroy();
+        }
+        this.darkOverlay = {};
 
         socket.emit('gameWon', this.multiplayerId, username);
 
@@ -771,20 +886,7 @@ class Multiplayer extends Phaser.Scene {
             for (const id in this.frontendPlayers) {
                 this.removePlayer(id);
             }
-            for (const id in this.frontendGrenades) {
-                this.removeGrenade(id);
-            }
-            for (const id in this.frontendSmoke) {
-                delete this.frontendSmoke[id];
-            }
-            for (const id in this.frontendProjectiles) {
-                this.removeProjectile(id);
-            }
-            for (const id in this.darkOverlay) {
-                delete this.darkOverlay[id];
-            }
-            socket.emit('leaveRoom', this.multiplayerId);
-            this.scene.stop();
+            this.scene.stop('Deathmatch');
             this.scene.start('lobby');
         });
     }
@@ -985,6 +1087,20 @@ class Multiplayer extends Phaser.Scene {
         this.reloadIndicator.strokePath();
     }
 
+    updateLeaderboard() {
+        const leaderboard = Object.entries(this.killCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([id, kills], index) => {
+                const badge = this.badgeEmojiMap[this.frontendPlayers[id]?.badge] || '';
+                const name = this.frontendPlayers[id]?.username || 'Unknown';
+                return `${index + 1}. ${badge} ${name}: ${kills} kill${kills === 1 ? '' : 's'}`;
+            }).join('\n');
+
+        this.leaderboardText.setText(`LEADERBOARD\n${leaderboard}`);
+    }
+
+
 }
 
-export default Multiplayer;
+export default KingOfTheHill;

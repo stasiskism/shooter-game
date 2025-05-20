@@ -25,7 +25,7 @@ class Room extends Phaser.Scene {
     gamemodes = [
     'last_man_standing',
     'deathmatch',
-    'capture_the_flag'
+    'king_of_the_hill'
     ];
 
     selectedGamemodeIndex = 0;
@@ -125,7 +125,13 @@ class Room extends Phaser.Scene {
         });
 
         socket.on('countdownEnd', () => {
-            const sceneToStart = this.gamemode === 'deathmatch' ? 'Deathmatch' : 'Multiplayer';
+            const sceneMap = {
+                deathmatch: 'Deathmatch',
+                last_man_standing: 'Multiplayer',
+                king_of_the_hill: 'KingOfTheHill'
+            };
+
+            const sceneToStart = sceneMap[this.gamemode] || 'Multiplayer';
             this.scene.start(sceneToStart, {
                 multiplayerId: this.roomId,
                 mapSize: this.mapSize,
@@ -609,7 +615,6 @@ class Room extends Phaser.Scene {
             this.readyButton.destroy()
             this.countdownText = this.add.text(800, 200, '', { fontSize: '64px', fill: '#fff' });
             this.countdownText.setOrigin(0.5);
-            this.mapSize = count * 250
             socket.emit('startCountdown', this.roomId)
         }
     }

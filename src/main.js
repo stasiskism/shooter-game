@@ -15,6 +15,7 @@ import Room from './room.js'
 import Spectator from './spectator.js'
 import Marketplace from './marketplace.js'
 import Deathmatch from './Deathmatch.js'
+import KingOfTheHill from './KingOfTheHill.js'
 
 
 const config = {
@@ -58,5 +59,6 @@ game.scene.add('room', Room)
 game.scene.add('spectator', Spectator)
 game.scene.add('marketplace', Marketplace)
 game.scene.add('Deathmatch', Deathmatch)
+game.scene.add('KingOfTheHill', KingOfTheHill)
 game.scene.start('scene1')
 

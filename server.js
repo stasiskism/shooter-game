@@ -69,6 +69,7 @@ const backendGrenades = {}
 const availableWeapons = {}
 const availableGrenades = {}
 const token = {}
+const kothState = {};
 
 app.post('/create-payment-intent', async (req, res) => {
     const { amount, username } = req.body;
@@ -313,7 +314,8 @@ io.on('connection', (socket) => {
             socket.emit('roomJoined', {
                 roomId,
                 gamemode: room.gamemode || 'last_man_standing',
-                hostId: room.host
+                hostId: room.host,
+                mapSize: 250 * room.maxPlayers
             });
         } else {
             socket.emit('roomJoinFailed', 'Room is full, does not exist, or password is incorrect');
@@ -327,7 +329,8 @@ io.on('connection', (socket) => {
                 socket.emit('roomJoined', {
                     roomId,
                     gamemode: rooms[roomId].gamemode || 'last_man_standing',
-                    hostId: rooms[roomId].host
+                    hostId: rooms[roomId].host,
+                    mapSize: 250 * rooms[roomId].maxPlayers
                 });
             } else {
                 socket.emit('roomJoinFailed', 'There are no rooms available')
@@ -392,7 +395,8 @@ io.on('connection', (socket) => {
                 socket.emit('roomJoined', {
                     roomId,
                     gamemode: rooms[roomId].gamemode || 'last_man_standing',
-                    hostId: rooms[roomId].host
+                    hostId: rooms[roomId].host,
+                    mapSize: 250 * rooms[roomId].maxPlayers
                 });
 
                 socket.emit('roomGamemode', rooms[roomId].gamemode || 'last_man_standing');
@@ -631,7 +635,7 @@ io.on('connection', (socket) => {
             if (data === 'a') {
                 backendPlayers[socket.id].x -= movementSpeed
                 if (backendPlayers[socket.id].x < 0) {
-                    if (gamemode === 'deathmatch') {
+                    if (gamemode !== 'last_man_standing') {
                         const killerUsername = 'the void';
                         player._isDead = true;
                         io.to(multiplayerId).emit('removeKilledPlayer', {
@@ -649,7 +653,7 @@ io.on('connection', (socket) => {
             } else if (data === 'd') {
                 backendPlayers[socket.id].x += movementSpeed
                 if (backendPlayers[socket.id].x > 1920 + mapSize) {
-                    if (gamemode === 'deathmatch') {
+                    if (gamemode !== 'last_man_standing') {
                         const killerUsername = 'the void';
                         player._isDead = true;
                         io.to(multiplayerId).emit('removeKilledPlayer', {
@@ -668,7 +672,7 @@ io.on('connection', (socket) => {
             if (data === 'w') {
                 backendPlayers[socket.id].y -= movementSpeed
                 if (backendPlayers[socket.id].y < 0) {
-                    if (gamemode === 'deathmatch') {
+                    if (gamemode !== 'last_man_standing') {
                         const killerUsername = 'the void';
                         player._isDead = true;
                         io.to(multiplayerId).emit('removeKilledPlayer', {
@@ -685,7 +689,7 @@ io.on('connection', (socket) => {
             } else if (data === 's') {
                 backendPlayers[socket.id].y += movementSpeed
                 if (backendPlayers[socket.id].y > 1080 + mapSize) {
-                    if (gamemode === 'deathmatch') {
+                    if (gamemode !== 'last_man_standing') {
                         const killerUsername = 'the void';
                         player._isDead = true;
                         io.to(multiplayerId).emit('removeKilledPlayer', {
@@ -977,7 +981,7 @@ io.on('connection', (socket) => {
                         }
                     } 
 
-                if (gamemode === 'deathmatch') {
+                if (gamemode !== 'last_man_standing') {
                     io.to(multiplayerId).emit('removeKilledPlayer', {
                         killerId,
                         victimId: playerId,
@@ -1311,64 +1315,84 @@ function filterGrenadesByMultiplayerId(multiplayerId) {
 
 function startGame(multiplayerId) {
     if (rooms[multiplayerId] && rooms[multiplayerId].players) {
-    let playersInRoom = {}
-    rooms[multiplayerId].gameStarted = true
-    rooms[multiplayerId].startTime = Date.now();
-    playersInRoom = rooms[multiplayerId].players
-    const corners = [
-        { x: 50, y: 50 },
-        { x: 1870, y: 50 },
-        { x: 50, y: 1030 },
-        { x: 1870, y: 1030 }
-    ];
-    for (let i = corners.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [corners[i], corners[j]] = [corners[j], corners[i]];
-    }
-    playersInRoom.forEach(async(player, index) => {
-        const id = player.id
-        const username = playerUsername[id];
-        const weaponId = weaponIds[id];
-        const bullets = weaponDetails[id].ammo
-        const firerate = weaponDetails[id].fire_rate
-        const reload = weaponDetails[id].reload
-        const radius = weaponDetails[id].radius
-        const grenadeId = grenadeIds[id]
-        const corner = corners[index]
+      let playersInRoom = {}
+      rooms[multiplayerId].gameStarted = true
+      rooms[multiplayerId].startTime = Date.now();
+      playersInRoom = rooms[multiplayerId].players
+      const corners = [
+          { x: 50, y: 50 },
+          { x: 1870, y: 50 },
+          { x: 50, y: 1030 },
+          { x: 1870, y: 1030 }
+      ];
+      for (let i = corners.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [corners[i], corners[j]] = [corners[j], corners[i]];
+      }
+      playersInRoom.forEach(async(player, index) => {
+          const id = player.id
+          const username = playerUsername[id];
+          const weaponId = weaponIds[id];
+          const bullets = weaponDetails[id].ammo
+          const firerate = weaponDetails[id].fire_rate
+          const reload = weaponDetails[id].reload
+          const radius = weaponDetails[id].radius
+          const grenadeId = grenadeIds[id]
+          const corner = corners[index]
 
-        
+          
 
-        backendPlayers[id] = { 
-            id,
-            multiplayerId,
-            x: corner.x,
-            y: corner.y,
-            score: 0,
-            username,
-            health: 100,
-            bullets,
-            firerate,
-            reload,
-            radius,
-            grenades: 1,
-            grenadeId,
-            weaponId,
-            skinId: skinIds[id] || null,
-            _isDead: false,
-            reloaded: false,
-            badge: rooms[multiplayerId]?.players.find(p => p.id === id)?.badge || null
-        };
+          backendPlayers[id] = { 
+              id,
+              multiplayerId,
+              x: corner.x,
+              y: corner.y,
+              score: 0,
+              username,
+              health: 100,
+              bullets,
+              firerate,
+              reload,
+              radius,
+              grenades: 1,
+              grenadeId,
+              weaponId,
+              skinId: skinIds[id] || null,
+              _isDead: false,
+              reloaded: false,
+              badge: rooms[multiplayerId]?.players.find(p => p.id === id)?.badge || null
+          };
 
-        if (rooms[multiplayerId]?.gamemode === 'deathmatch') {
-            backendPlayers[id].kills = 0;
-            backendPlayers[id].deaths = 0;
-        }
+          if (rooms[multiplayerId]?.gamemode !== 'last_man_standing') {
+              backendPlayers[id].kills = 0;
+              backendPlayers[id].deaths = 0;
+          }
 
-        await updateProgress(username, 'play_match', 1);
-        await updateProgress(username, 'play_games', 1);
+          await updateProgress(username, 'play_match', 1);
+          await updateProgress(username, 'play_games', 1);
 
-    });
-}
+          if (rooms[multiplayerId]?.gamemode === 'king_of_the_hill') {
+            const mapSize = rooms[multiplayerId]?.maxPlayers * 250;
+            kothState[multiplayerId] = {
+                zone: {
+                    x: 1920 / 2 + mapSize / 2,
+                    y: 1080 / 2 + mapSize / 2,
+                    radius: 200
+                },
+                controlTime: {}
+            };
+              if (!kothState[multiplayerId]) {
+                  kothState[multiplayerId] = {
+                      zone: { x: 960, y: 540, radius: 150 },
+                      controlTime: {}
+                  };
+              }
+              kothState[multiplayerId].controlTime[player.id] = 0;
+          }
+
+      });
+
+    } 
 }
 
 // function startGame(multiplayerId) {
@@ -1603,6 +1627,12 @@ async function updateProgress(username, type, amount) {
                   multiplayerId,
                   _isDead: false
               };
+
+              if (rooms[multiplayerId]?.gamemode === 'king_of_the_hill') {
+                  if (!kothState[multiplayerId].controlTime[playerId]) {
+                      kothState[multiplayerId].controlTime[playerId] = 0;
+                  }
+              }
 
               io.to(multiplayerId).emit('updatePlayers', filterPlayersByMultiplayerId(multiplayerId));
           }
@@ -2193,7 +2223,7 @@ setInterval(async () => {
 
                     }
 
-                    if (gamemode === 'deathmatch') {
+                    if (gamemode !== 'last_man_standing') {
                         io.to(multiplayerId).emit('removeKilledPlayer', {
                             killerId: shooterId,
                             victimId: playerId,
@@ -2244,6 +2274,63 @@ setInterval(async () => {
     for (const roomId in rooms) {
         io.emit('updateRoomPlayers', rooms[roomId].players);
     }
+
+    for (const multiplayerId in kothState) {
+        const room = rooms[multiplayerId];
+        if (!room || room.gamemode !== 'king_of_the_hill') continue;
+
+        const koth = kothState[multiplayerId];
+        const players = filterPlayersByMultiplayerId(multiplayerId);
+
+        const playersInZone = [];
+
+        for (const playerId in players) {
+            const player = players[playerId];
+            const dx = player.x - koth.zone.x;
+            const dy = player.y - koth.zone.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < koth.zone.radius) {
+                playersInZone.push(playerId);
+            }
+        }
+
+        for (const playerId in koth.controlTime) {
+            if (!players[playerId]) {
+                delete koth.controlTime[playerId];
+            }
+        }
+
+        let holder = null;
+
+        if (playersInZone.length === 1) {
+            holder = playersInZone[0];
+            if (!koth.controlTime[holder]) koth.controlTime[holder] = 0;
+            koth.controlTime[holder] += 0.015;
+
+            if (koth.controlTime[holder] >= 15) { // cia keiciam zonos capturinimo laika
+                const winnerUsername = playerUsername[holder];
+                const room = rooms[multiplayerId];
+
+                if (room && !room.gameEnded) {
+                    room.gameEnded = true;
+                    io.to(multiplayerId).emit('gameWon', winnerUsername);
+
+                    delete kothState[multiplayerId];
+                    delete rooms[multiplayerId];
+                    continue;
+                }
+            }
+        }
+        io.to(multiplayerId).emit('kothZone', koth.zone);
+
+        io.to(multiplayerId).emit('kothUpdate', {
+            holder,
+            controlTime: koth.controlTime
+        });
+    }
+
+
 }, 15);
 
 const PORT = 3000;

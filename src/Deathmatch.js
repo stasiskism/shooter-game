@@ -771,53 +771,53 @@ class Deathmatch extends Phaser.Scene {
     }
 
     gameWon(username) {
-    this.gameStop = true;
+        this.gameStop = true;
 
-    socket.off('updatePlayers');
-    socket.off('updateProjectiles');
-    socket.off('playerAnimationUpdate');
-    socket.off('weaponStateUpdate');
-    socket.off('removeKilledPlayer');
-    socket.off('startRespawnCountdown');
-    socket.off('gameWon');
-    this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
-    this.add.text(
-        this.cameras.main.width / 2,
-        this.cameras.main.height / 2,
-        `${username} has won the game!`,
-        { fontFamily: 'Arial', fontSize: 48, color: '#ffffff' }
-    ).setOrigin(0.5);
+        socket.off('updatePlayers');
+        socket.off('updateProjectiles');
+        socket.off('playerAnimationUpdate');
+        socket.off('weaponStateUpdate');
+        socket.off('removeKilledPlayer');
+        socket.off('startRespawnCountdown');
+        socket.off('gameWon');
+        this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
+        this.add.text(
+            this.cameras.main.width / 2,
+            this.cameras.main.height / 2,
+            `${username} has won the game!`,
+            { fontFamily: 'Arial', fontSize: 48, color: '#ffffff' }
+        ).setOrigin(0.5);
 
-    if (this.playerAmmo) this.playerAmmo.setVisible(false);
-    if (this.playerHealth[socket.id]?.container) this.playerHealth[socket.id].container.setVisible(false);
+        if (this.playerAmmo) this.playerAmmo.setVisible(false);
+        if (this.playerHealth[socket.id]?.container) this.playerHealth[socket.id].container.setVisible(false);
 
-    for (const id in this.frontendPlayers) this.removePlayer(id);
-    for (const id in this.frontendProjectiles) this.removeProjectile(id);
-    for (const id in this.frontendGrenades) this.removeGrenade(id);
-    for (const id in this.frontendSmoke) {
-        this.frontendSmoke[id].destroy();
-        delete this.frontendSmoke[id];
-    }
-    for (const id in this.frontendExplosion) {
-        this.frontendExplosion[id].destroy();
-        delete this.frontendExplosion[id];
-    }
-
-    for (const id in this.darkOverlay) {
-        this.darkOverlay[id].destroy();
-    }
-    this.darkOverlay = {};
-
-    socket.emit('gameWon', this.multiplayerId, username);
-
-    this.time.delayedCall(5000, () => {
-        for (const id in this.frontendPlayers) {
-            this.removePlayer(id);
+        for (const id in this.frontendPlayers) this.removePlayer(id);
+        for (const id in this.frontendProjectiles) this.removeProjectile(id);
+        for (const id in this.frontendGrenades) this.removeGrenade(id);
+        for (const id in this.frontendSmoke) {
+            this.frontendSmoke[id].destroy();
+            delete this.frontendSmoke[id];
         }
-        this.scene.stop('Deathmatch');
-        this.scene.start('lobby');
-    });
-}
+        for (const id in this.frontendExplosion) {
+            this.frontendExplosion[id].destroy();
+            delete this.frontendExplosion[id];
+        }
+
+        for (const id in this.darkOverlay) {
+            this.darkOverlay[id].destroy();
+        }
+        this.darkOverlay = {};
+
+        socket.emit('gameWon', this.multiplayerId, username);
+
+        this.time.delayedCall(5000, () => {
+            for (const id in this.frontendPlayers) {
+                this.removePlayer(id);
+            }
+            this.scene.stop('Deathmatch');
+            this.scene.start('lobby');
+        });
+    }
 
 
     grenadeExplode(x, y, id, explosion) {
