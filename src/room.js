@@ -50,6 +50,7 @@ class Room extends Phaser.Scene {
     totalPlayers = 0;
     playerVotes = new Set();
     
+    
     constructor() {
         super({ key: 'room'});
     }
@@ -213,47 +214,53 @@ class Room extends Phaser.Scene {
             this.updateGamemodeDisplay();
         });
 
-        socket.on('mapVoteUpdate', (voteData) => {
-            console.log('[mapVoteUpdate]', voteData, 'Total players:', this.totalPlayers);
-            
+        socket.on('mapVoteUpdate', (voteData) => {     
             this.mapVoteCounts = voteData;
 
             if (!this.voteButtons || !Array.isArray(this.voteButtons)) return;
 
-            // Update each voteCountText based on matching mapKey
-            console.log('[mapVoteUpdate]', voteData, 'Buttons:', this.voteButtons);
             if (!this.voteButtons) return;
             this.voteButtons.forEach((button, index) => {
-                if (!button || !button.voteCountText) {
-                    console.warn(`Missing voteCountText on button ${index}`, button);
-                } else {
-                    const count = voteData[button.mapKey] || 0;
-                    console.log(`Setting vote count for ${button.mapKey} to ${count}`);
-                    button.voteCountText.setText(`Votes: ${count}`);
-                    
-                    // 🔧 Force redraw
-                    button.voteCountText.setVisible(false);
-                    button.voteCountText.setVisible(true);
+                const count = voteData[button.mapKey] || 0;
+                if (!button.voteCountText) {
+                    return;
                 }
+                button.voteCountText.setText('');
+                button.voteCountText.setText(`Votes: ${count}`);
+                button.voteCountText.setText(`Votes: ${count}`);
+                    
+                button.voteCountText.setVisible(false);
+                button.voteCountText.setVisible(true);
             });
 
-            const totalVotes = Object.values(voteData).reduce((sum, v) => sum + v, 0);
-            if (totalVotes >= this.totalPlayers && !this.finishedVotingCalled) {
-                this.finishedVotingCalled = true;
-                this.finishVoting();
-            }
         });
 
         socket.on('startMapVoting', () => {
+            if (this.votingInProgress) {
+                return;
+            }
             this.initMapVotingUI();
         });
 
         socket.on('roomMap', (mapKey) => {
-            console.log(`[roomMap] Map selected: ${mapKey}`);
             this.selectedMap = mapKey;
             this.selectedMapIndex = this.mapOptions.indexOf(mapKey);
             this.updateMapDisplay();
-            this.destroyMapVotingUI();  // Will clean up vote UI
+            this.destroyMapVotingUI();
+        });
+
+        socket.on('mapVoteCountdownUpdate', (timeLeft) => {
+            this.updateVotingCountdownUI(timeLeft);
+        });
+
+        socket.on('mapVotingFinished', (mapKey) => {
+            this.selectedMap = mapKey;
+            this.selectedMapIndex = this.mapOptions.indexOf(mapKey);
+            this.updateMapDisplay();
+            this.destroyMapVotingUI();
+            if (this.previousMapButton) this.previousMapButton.disableInteractive().setAlpha(0.5);
+            if (this.nextMapButton) this.nextMapButton.disableInteractive().setAlpha(0.5);
+
         });
     }
 
@@ -845,11 +852,15 @@ class Room extends Phaser.Scene {
     }
 
     formatMapName(mapKey) {
+        if (typeof mapKey !== 'string') return 'Unknown Map';
         if (mapKey === 'random') return 'Random Map';
         return mapKey.replace(/map/, 'Map ');
     }
 
     initMapVotingUI() {
+        if (this.voteButtons && this.voteButtons.length > 0) {
+            this.destroyMapVotingUI();
+        }
         this.finishedVotingCalled = false;
         this.votingInProgress = true;
         this.mapVoteCounts = { map1: 0, map2: 0, random: 0 };
@@ -895,7 +906,6 @@ class Room extends Phaser.Scene {
     }
 
     finishVoting() {
-        console.log('[finishVoting] Triggered');
         this.votingInProgress = false;
 
         if (this.voteTimeout) {
@@ -904,37 +914,70 @@ class Room extends Phaser.Scene {
         }
 
         let maxVotes = -1;
-        let selected = 'map1'; 
+        let selectedMaps = [];
 
         for (const map in this.mapVoteCounts) {
-            if (this.mapVoteCounts[map] > maxVotes) {
-                maxVotes = this.mapVoteCounts[map];
-                selected = map;
+            const votes = this.mapVoteCounts[map];
+            if (votes > maxVotes) {
+                maxVotes = votes;
+                selectedMaps = [map];
+            } else if (votes === maxVotes) {
+                selectedMaps.push(map);
             }
         }
+
+        const selected = selectedMaps[Math.floor(Math.random() * selectedMaps.length)];
 
         socket.emit('updateMap', {
             roomId: this.roomId,
             map: selected
         });
 
+
         this.destroyMapVotingUI();
     }
 
     destroyMapVotingUI() {
-        console.log('[destroyMapVotingUI] Destroying vote UI');
         if (!this.voteButtons || !Array.isArray(this.voteButtons)) return;
 
-         this.voteButtons.forEach(button => {
+        this.voteButtons.forEach(button => {
             button?.btn?.destroy();
             button?.voteCountText?.destroy();
         });
+
+        if (this.votingCountdownText) {
+            this.votingCountdownText.destroy();
+            this.votingCountdownText = null;
+        }
 
         this.voteButtons = null;
         this.mapVoteCounts = null;
         this.playerVoted = false;
         this.votingInProgress = false;
         this.finishedVotingCalled = false;
+    }
+
+    updateVotingCountdownUI(timeLeft) {
+        if (this.votingCountdownText && !this.votingCountdownText.destroyed) {
+            this.votingCountdownText.setText(`Voting ends in: ${timeLeft}s`);
+        } else {
+            if (this.votingCountdownText) {
+                this.votingCountdownText.destroy();
+            }
+
+            this.votingCountdownText = this.add.text(
+                this.centerX,
+                980,
+                `Voting ends in: ${timeLeft}s`,
+                {
+                    fontFamily: 'Berlin Sans FB Demi',
+                    fontSize: '32px',
+                    fill: '#ffffff'
+                }
+            )
+            .setOrigin(0.5)
+            .setScale(2);
+        }
     }
 
 }
