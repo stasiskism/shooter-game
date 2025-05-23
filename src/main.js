@@ -31,6 +31,8 @@ const config = {
             debug: false
         }
     },
+    pixelArt: true,
+    roundPixels: true,
     backgroundColor: 0x5F6e7a,
     parent: 'phaser-example',
     scale: {

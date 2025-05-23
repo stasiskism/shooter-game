@@ -51,6 +51,7 @@ class Multiplayer extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#000000');
         this.multiplayerId = data.multiplayerId
         this.mapSize = data.mapSize
+        this.mapKey = data.map;
     }
 
     preload() {
@@ -100,11 +101,112 @@ class Multiplayer extends Phaser.Scene {
         }
     }
 
-    setupMap() {
-        const map1 = this.make.tilemap({ key: "map2", tileWidth: 32, tileHeight: 32 });
-        const tileset1 = map1.addTilesetImage("Mapass", "tiles_multiplayer");
-        const layer1 = map1.createLayer("Tile Layer 1", tileset1, -2000, -1000).setScale(1);
+
+setupMap() {
+  let key = this.mapKey;
+
+  // ────────────────────────────────────────────
+  // 1) RANDOMLY‐GENERATED MAP
+  // ────────────────────────────────────────────
+  if (key === 'random') {
+    // dimensions in tiles & pixels
+    const TILE_W = 236;
+    const TILE_H = 173;
+    const MAP_W  = 100;
+    const MAP_H  = 100;
+
+    // a) make an empty tilemap
+    const map = this.make.tilemap({
+      width:     MAP_W,
+      height:    MAP_H,
+      tileWidth: TILE_W,
+      tileHeight:TILE_H
+    });
+
+    // b) add both tilesets (they must share the same tile size)
+    const ts1 = map.addTilesetImage('rnd1', 'tiles_rnd1', TILE_W, TILE_H);
+    const ts2 = map.addTilesetImage('rnd2', 'tiles_rnd2', TILE_W, TILE_H);
+
+    // c) create a blank layer covering the whole map
+    const layer = map.createBlankLayer(
+      'randomLayer',
+      [ ts1, ts2 ],
+      0, 0,
+      MAP_W,
+      MAP_H
+    ).setScale(1);
+
+    // d) build a weighted pool of GIDs
+    //    — tiles_rnd1 appears 8× as often as tiles_rnd2
+    const pool = [];
+    const weight1 = 8;
+    const weight2 = 1;
+
+    // ts1 GIDs
+    for (let i = 0; i < ts1.total; i++) {
+      const gid = ts1.firstgid + i;
+      for (let w = 0; w < weight1; w++) {
+        pool.push(gid);
+      }
     }
+
+    // ts2 GIDs
+    for (let i = 0; i < ts2.total; i++) {
+      const gid = ts2.firstgid + i;
+      for (let w = 0; w < weight2; w++) {
+        pool.push(gid);
+      }
+    }
+
+    // e) fill every cell by randomly drawing from our pool
+    layer.randomize(0, 0, MAP_W, MAP_H, pool);
+
+    return;
+  }
+
+  // ────────────────────────────────────────────
+  // 2) FALLBACK: LOAD A TILED JSON MAP
+  // ────────────────────────────────────────────
+  // a) make the tilemap from your .json
+  const map = this.make.tilemap({
+    key:       key,
+    tileWidth: 32,
+    tileHeight:32
+  });
+
+  // b) per‐map tileset hookup
+  const tilesetConfigs = {
+    map4: [ { name: "tilsetas_naujam", key: "tiles_multiplayer" } ],
+    map2: [ { name: "Mapass",          key: "tiles_multiplayer" } ]
+    // add more maps here…
+  };
+
+  const config = tilesetConfigs[key];
+  if (!config) {
+    console.warn(`No tileset config for map key "${key}"`);
+    return;
+  }
+
+  // c) add each tileset into Phaser
+  const phaserTilesets = config.map(ts =>
+    map.addTilesetImage(ts.name, ts.key)
+  );
+
+  // d) compute any per‐map X/Y offsets
+  const xOffset = (key === 'map2' || key === 'map4') ? -2000 : 0;
+  const yOffset = (key === 'map2') ? -1000
+                : (key === 'map4') ? -3000
+                : 0;
+
+  // e) finally, create the displayed layer
+  map
+    .createLayer("Tile Layer 1", phaserTilesets, xOffset, yOffset)
+    .setScale(1);
+}
+
+
+
+    
 
     gunAnimation() {
         for (const weaponId in this.animationKeys) {

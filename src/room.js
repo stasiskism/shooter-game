@@ -41,9 +41,9 @@ class Room extends Phaser.Scene {
       no_damage: '🧹'
     };
 
-    mapOptions = ['map1', 'map2', 'random', 'vote_map'];
+    mapOptions = ['map4', 'map2', 'random', 'vote_map'];
     selectedMapIndex = 0;
-    selectedMap = 'map1';
+    selectedMap = 'map4';
     mapText = null;
     votingInProgress = false;
     voteTimeout = null;
@@ -59,7 +59,7 @@ class Room extends Phaser.Scene {
         this.mapSize = data.mapSize
         this.gamemode = data.gamemode || 'last_man_standing';
         this.hostId = data.hostId;
-        this.selectedMap = data.map || 'map1';
+        this.selectedMap = data.map || 'map4';
         this.selectedMapIndex = this.mapOptions.indexOf(this.selectedMap);
     }
     preload() {
@@ -863,12 +863,12 @@ class Room extends Phaser.Scene {
         }
         this.finishedVotingCalled = false;
         this.votingInProgress = true;
-        this.mapVoteCounts = { map1: 0, map2: 0, random: 0 };
+        this.mapVoteCounts = { map4: 0, map2: 0, random: 0 };
         this.playerVoted = false;
         this.playerVotes = new Set();
         this.voteButtons = [];
 
-        const voteOptions = ['map1', 'map2', 'random'];
+        const voteOptions = ['map4', 'map2', 'random'];
         let startX = this.centerX - 300;
         const spacing = 300;
 

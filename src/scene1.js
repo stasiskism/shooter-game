@@ -90,10 +90,13 @@ class Scene1 extends Phaser.Scene {
         this.load.image("tiles5", 'assets/marketplace/TX Tileset Stone Ground.png');
         this.load.image("tiles6", 'assets/marketplace/TX Tileset Wall.png');
         this.load.tilemapTiledJSON('map1', 'assets/marketplace/maps_marketplace.json');
+        this.load.tilemapTiledJSON('map4', 'assets/map_antas.json');
+        this.load.image('tiles_rnd1', 'assets/grass.png');
+        this.load.image('tiles_rnd2', 'assets/zeme.png');
         this.load.image("tiles_multiplayer", 'assets/32x32_DEMO.png');
         this.load.tilemapTiledJSON('map2', 'assets/mapsss.json');
         this.load.image("tiles_multiplayer", 'assets/32x32_DEMO.png');
-        this.load.tilemapTiledJSON('map2', 'assets/Multiplayer_Map.json');
+        this.load.tilemapTiledJSON('map3', 'assets/Multiplayer_Map.json');
         this.load.image("skin1_pistol", 'assets/V1.00/PNG/skins/skin1_pistol.png');
         this.load.image("skin1_ar", 'assets/V1.00/PNG/skins/skin1_ar.png');
         this.load.image("skin1_shotgun", 'assets/V1.00/PNG/skins/skin1_shotgun.png');
