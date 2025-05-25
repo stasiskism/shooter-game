@@ -298,7 +298,7 @@ io.on('connection', (socket) => {
             isPrivate,
             password: isPrivate ? password : null,
             gamemode: 'last_man_standing',
-            map: 'map1'
+            map: 'map4'
         };
         const mapSize = 250 * maxPlayers;
         console.log('Created roomId:', roomId);
@@ -321,7 +321,7 @@ io.on('connection', (socket) => {
                 gamemode: room.gamemode || 'last_man_standing',
                 hostId: room.host,
                 mapSize: 250 * room.maxPlayers,
-                map: room.map || 'map1'
+                map: room.map || 'map4'
             });
         } else {
             socket.emit('roomJoinFailed', 'Room is full, does not exist, or password is incorrect');
@@ -337,7 +337,7 @@ io.on('connection', (socket) => {
                     gamemode: rooms[roomId].gamemode || 'last_man_standing',
                     hostId: rooms[roomId].host,
                     mapSize: 250 * rooms[roomId].maxPlayers,
-                    map: rooms[roomId].map || 'map1'
+                    map: rooms[roomId].map || 'map4'
                 });
             } else {
                 socket.emit('roomJoinFailed', 'There are no rooms available')
@@ -856,6 +856,12 @@ io.on('connection', (socket) => {
             const elapsed = (Date.now() - rooms[multiplayerId].startTime) / 1000;
             if (elapsed < 60) await updateProgress(username, 'speed_demon', 1);
         }
+
+        for (const barrelId in explosiveBarrels) {
+            if (explosiveBarrels[barrelId].multiplayerId === multiplayerId) {
+                delete explosiveBarrels[barrelId];
+            }
+        }
         delete filterPlayersByMultiplayerId(multiplayerId)
         delete filterProjectilesByMultiplayerId(multiplayerId)
         const client = await sql.connect()
@@ -1279,7 +1285,7 @@ io.on('connection', (socket) => {
           if (!room.votedPlayers) room.votedPlayers = new Set();
           if (room.votedPlayers.has(socket.id)) return;
 
-          if (!['map1', 'map2', 'random'].includes(map)) return;
+          if (!['map4', 'map2', 'random'].includes(map)) return;
 
           if (!room.voteCountdownStarted) {
               room.voteCountdownStarted = true;
@@ -1314,19 +1320,31 @@ io.on('connection', (socket) => {
 
 
       socket.on('startVoting', ({ roomId }) => {
-          if (!rooms[roomId]) return;
+        const room = rooms[roomId];
+        if (!room) return;
 
-          rooms[roomId].voteCounts = { map1: 0, map2: 0, random: 0 };
-          rooms[roomId].votedPlayers = new Set();
-          rooms[roomId].isVoting = true;
+        if (socket.id !== room.host) {
+            console.warn(`Unauthorized voting attempt by ${socket.id}`);
+            return;
+        }
 
-          io.to(roomId).emit('startMapVoting');
+        if (room.selectedMap !== 'vote_map') {
+            console.warn(`Voting attempted when selected map is not 'vote_map'`);
+            return;
+        }
 
+        room.voteCounts = { map4: 0, map2: 0, random: 0 };
+        room.votedPlayers = new Set();
+        room.isVoting = true;
+        room.votingFinished = false;
 
-          setTimeout(() => {
-              finishVoting(roomId);
-          }, 10000);
-      });
+        io.to(roomId).emit('startMapVoting');
+
+        setTimeout(() => {
+            finishVoting(roomId);
+        }, 10000);
+    });
+
  
 });
 
@@ -1437,7 +1455,7 @@ function startGame(multiplayerId) {
           const j = Math.floor(Math.random() * (i + 1));
           [corners[i], corners[j]] = [corners[j], corners[i]];
       }
-      const selectedMap = rooms[multiplayerId]?.map || 'map1';
+      const selectedMap = rooms[multiplayerId]?.map || 'map4';
       playersInRoom.forEach(async(player, index) => {
           const id = player.id
           const username = playerUsername[id];
@@ -1513,7 +1531,8 @@ function startGame(multiplayerId) {
 
           const mapSize = rooms[multiplayerId].maxPlayers * 250;
           const safeMargin = 200;
-          for (let i = 1; i <= 4; i++) {
+          for (let i = 1; i <= 20; i++) {
+            console.log("as")
               const x = Math.floor(Math.random() * ((1920 + mapSize) - 2 * safeMargin)) + safeMargin;
               const y = Math.floor(Math.random() * ((1080 + mapSize) - 2 * safeMargin)) + safeMargin;
 

@@ -826,6 +826,21 @@ class Room extends Phaser.Scene {
                 this.handleMapChange(1);
             });
         }
+
+        if (socket.id === this.hostId && this.selectedMap === 'vote_map') {
+            this.startVoteButton = this.add.text(this.centerX, this.centerY - 250, 'Start Voting', {
+                fontSize: '32px',
+                fill: '#fff',
+                backgroundColor: '#000',
+                padding: { x: 10, y: 5 }
+            }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+            this.startVoteButton.on('pointerdown', () => {
+                socket.emit('startVoting', { roomId: this.roomId });
+                this.startVoteButton.setVisible(false);
+            });
+        }
+
     }
 
     handleMapChange(direction) {
@@ -844,11 +859,29 @@ class Room extends Phaser.Scene {
         if (this.mapText) {
             this.mapText.setText(`Map: ${this.formatMapName(this.selectedMap)}`);
         }
-        if (this.selectedMap === 'vote_map') {
-            socket.emit('startVoting', { roomId: this.roomId });
-        } else {
+        if (this.selectedMap !== 'vote_map') {
             this.destroyMapVotingUI();
         }
+
+        if (this.startVoteButton) {
+            this.startVoteButton.destroy();
+            this.startVoteButton = null;
+        }
+
+        if (socket.id === this.hostId && this.selectedMap === 'vote_map') {
+            this.startVoteButton = this.add.text(this.centerX, this.centerY - 120, 'Start Voting', {
+                fontSize: '32px',
+                fill: '#fff',
+                backgroundColor: '#000',
+                padding: { x: 10, y: 5 }
+            }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+            this.startVoteButton.on('pointerdown', () => {
+                socket.emit('startVoting', { roomId: this.roomId });
+                this.startVoteButton.setVisible(false);
+            });
+        }
+
     }
 
     formatMapName(mapKey) {
@@ -967,7 +1000,7 @@ class Room extends Phaser.Scene {
 
             this.votingCountdownText = this.add.text(
                 this.centerX,
-                980,
+                this.centerY - 120,
                 `Voting ends in: ${timeLeft}s`,
                 {
                     fontFamily: 'Berlin Sans FB Demi',

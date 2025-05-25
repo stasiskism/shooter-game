@@ -395,17 +395,17 @@ setupMap() {
                 alivePlayers[id] = true;
             }
 
-            const alivePlayerCount = Object.keys(alivePlayers).length;
-            if (alivePlayerCount === 1) {
-                this.gameStop = true
-                const id = Object.keys(alivePlayers)[0]
-                this.gameWon(backendPlayers[id].username)
-                this.playerAmmo.destroy()
-                this.playerHealth[id].container.destroy()
-                this.playerUsername[id].destroy()
-                this.stopShooting()
-                socket.off('updatePlayers')
-            }
+            // const alivePlayerCount = Object.keys(alivePlayers).length;
+            // if (alivePlayerCount === 1) {
+            //     this.gameStop = true
+            //     const id = Object.keys(alivePlayers)[0]
+            //     this.gameWon(backendPlayers[id].username)
+            //     this.playerAmmo.destroy()
+            //     this.playerHealth[id].container.destroy()
+            //     this.playerUsername[id].destroy()
+            //     this.stopShooting()
+            //     socket.off('updatePlayers')
+            // }
 
             for (const id in this.frontendPlayers) {
                 if (!alivePlayers[id]) {
