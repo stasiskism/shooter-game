@@ -34,12 +34,12 @@ class Deathmatch extends Phaser.Scene {
     isRespawning = false;
 
     badgeEmojiMap = {
-      no_reload: '🎯',
-      close_call: '❤️‍🩹',
-      unlock_all_weapons: '🔫',
-      unlock_all_skins: '🧢',
-      speed_demon: '⚡',
-      no_damage: '🧹'
+        no_reload: '🎯',
+        close_call: '❤️‍🩹',
+        unlock_all_weapons: '🔫',
+        unlock_all_skins: '🧢',
+        speed_demon: '⚡',
+        no_damage: '🧹'
     };
 
     barrels = {};
@@ -54,6 +54,7 @@ class Deathmatch extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#000000');
         this.multiplayerId = data.multiplayerId
         this.mapSize = data.mapSize
+        this.mapKey = data.map;
     }
 
     preload() {
@@ -93,7 +94,7 @@ class Deathmatch extends Phaser.Scene {
         this.killCounts = {};
 
     }
-    
+
     onSettingsPanelOpened(panelVisible) {
         this.isPanelVisible = panelVisible;
         if (panelVisible) {
@@ -112,9 +113,85 @@ class Deathmatch extends Phaser.Scene {
     }
 
     setupMap() {
-        const map1 = this.make.tilemap({ key: "map2", tileWidth: 32, tileHeight: 32 });
-        const tileset1 = map1.addTilesetImage("Mapass", "tiles_multiplayer");
-        const layer1 = map1.createLayer("Tile Layer 1", tileset1, -2000, -1000).setScale(1);
+        let key = this.mapKey;
+
+        const xOffset = (key === 'map2' || key === 'map4' || key === 'random') ? -2000 : 0;
+        const yOffset = (key === 'map2') ? -1000
+            : (key === 'map4') ? -3000
+                : (key === 'random') ? -3000
+                    : 0;
+
+        if (key === 'random') {
+            const TILE_W = 236;
+            const TILE_H = 173;
+            const MAP_W = 100;
+            const MAP_H = 100;
+
+            const map = this.make.tilemap({
+                width: MAP_W,
+                height: MAP_H,
+                tileWidth: TILE_W,
+                tileHeight: TILE_H
+            });
+            const ts1 = map.addTilesetImage('rnd1', 'tiles_rnd1', TILE_W, TILE_H);
+            const ts2 = map.addTilesetImage('rnd2', 'tiles_rnd2', TILE_W, TILE_H);
+
+            const layer = map.createBlankLayer(
+                'randomLayer',
+                [ts1, ts2],
+                xOffset,
+                yOffset,
+                MAP_W,
+                MAP_H
+            ).setScale(1);
+
+            const pool = [];
+            const weight1 = 8;
+            const weight2 = 1;
+
+            for (let i = 0; i < ts1.total; i++) {
+                const gid = ts1.firstgid + i;
+                for (let w = 0; w < weight1; w++) {
+                    pool.push(gid);
+                }
+            }
+
+            for (let i = 0; i < ts2.total; i++) {
+                const gid = ts2.firstgid + i;
+                for (let w = 0; w < weight2; w++) {
+                    pool.push(gid);
+                }
+            }
+
+            layer.randomize(0, 0, MAP_W, MAP_H, pool);
+
+            return;
+        }
+
+        const map = this.make.tilemap({
+            key: key,
+            tileWidth: 32,
+            tileHeight: 32
+        });
+
+        const tilesetConfigs = {
+            map4: [{ name: "tilsetas_naujam", key: "tiles_multiplayer" }],
+            map2: [{ name: "Mapass", key: "tiles_multiplayer" }]
+        };
+
+        const config = tilesetConfigs[key];
+        if (!config) {
+            console.warn(`No tileset config for map key "${key}"`);
+            return;
+        }
+
+        const phaserTilesets = config.map(ts =>
+            map.addTilesetImage(ts.name, ts.key)
+        );
+
+        map
+            .createLayer("Tile Layer 1", phaserTilesets, xOffset, yOffset)
+            .setScale(1);
     }
 
     gunAnimation() {
@@ -125,14 +202,14 @@ class Deathmatch extends Phaser.Scene {
             const endShoot = weaponData.endShoot;
             const startReload = weaponData.startReload;
             const endReload = weaponData.endReload;
-    
+
             const reloadTime = this.weaponDetails.reload;
             const reloadFrames = endReload - startReload + 1;
             const reloadFrameRate = reloadFrames / (reloadTime / 1000);
-    
+
         }
     }
-    
+
 
     setupScene() {
         const centerX = this.cameras.main.width / 2;
@@ -273,7 +350,7 @@ class Deathmatch extends Phaser.Scene {
         });
 
         socket.on('updatePlayers', backendPlayers => {
-            
+
             const alivePlayers = {};
             for (const id in backendPlayers) {
                 const backendPlayer = backendPlayers[id];
@@ -353,13 +430,13 @@ class Deathmatch extends Phaser.Scene {
 
             const killText = this.add.text(feedX - 10, feedY,
                 `${killerName} → ${victimName}`, {
-                    fontFamily: 'Arial Black',
-                    fontSize: '28px',
-                    color: '#ffffff',
-                    stroke: '#000000',
-                    strokeThickness: 4,
-                    backgroundColor: 'transparent'
-                }).setOrigin(1, 0).setScrollFactor(0).setDepth(999);
+                fontFamily: 'Arial Black',
+                fontSize: '28px',
+                color: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 4,
+                backgroundColor: 'transparent'
+            }).setOrigin(1, 0).setScrollFactor(0).setDepth(999);
 
             this.killFeed.add(killText);
             this.time.delayedCall(4000, () => killText.destroy());
@@ -489,14 +566,14 @@ class Deathmatch extends Phaser.Scene {
         this.sound.play(this.weapon[socket.id] + 'Sound', { volume: 0.5 })
         const direction = Math.atan((this.crosshair.x - this.frontendPlayers[socket.id].x) / (this.crosshair.y - this.frontendPlayers[socket.id].y))
         socket.emit('shoot', this.frontendPlayers[socket.id], this.crosshair, direction, this.multiplayerId);
-        socket.emit('gunAnimation', {multiplayerId: this.multiplayerId, playerId: socket.id, animation: 'singleShot', weapon: this.weapon[socket.id]})
+        socket.emit('gunAnimation', { multiplayerId: this.multiplayerId, playerId: socket.id, animation: 'singleShot', weapon: this.weapon[socket.id] })
         this.shootingInterval = setInterval(() => {
             if (this.ammo === 0) return
             if (!this.crosshair || !this.frontendPlayers[socket.id]) return
             const direction = Math.atan((this.crosshair.x - this.frontendPlayers[socket.id].x) / (this.crosshair.y - this.frontendPlayers[socket.id].y))
             this.sound.play(this.weapon[socket.id] + 'Sound', { volume: 0.5 })
             socket.emit('shoot', this.frontendPlayers[socket.id], this.crosshair, direction, this.multiplayerId);
-            socket.emit('gunAnimation', {multiplayerId: this.multiplayerId, playerId: socket.id, animation: 'singleShot', weapon: this.weapon[socket.id]})
+            socket.emit('gunAnimation', { multiplayerId: this.multiplayerId, playerId: socket.id, animation: 'singleShot', weapon: this.weapon[socket.id] })
             //this.frontendWeapons[socket.id].anims.play(`singleShot_${this.weapon[socket.id]}`, true);
         }, firerate); // fire rate based on weapon
 
@@ -609,7 +686,7 @@ class Deathmatch extends Phaser.Scene {
 
         if (id === socket.id) {
             this.ammo = backendPlayer.bullets;
-            
+
             this.playerAmmo
                 .setPosition(backendPlayer.x, backendPlayer.y + 75)
                 .setText(`Ammo: ${this.ammo}/${this.ammoFixed}`)
@@ -620,17 +697,17 @@ class Deathmatch extends Phaser.Scene {
     }
 
     removePlayer(id) {
-        
+
         if (id === socket.id && this.playerAmmo) {
             this.playerAmmo.destroy();
             this.stopShooting();
         }
 
         if (this.frontendPlayers[id]) {
-        this.frontendPlayers[id].anims.stop();
-        this.frontendPlayers[id].destroy();
-        delete this.frontendPlayers[id];
-    }
+            this.frontendPlayers[id].anims.stop();
+            this.frontendPlayers[id].destroy();
+            delete this.frontendPlayers[id];
+        }
 
         if (this.frontendPlayers[id]) this.frontendPlayers[id].anims.stop();
         if (this.frontendPlayers[id]) this.frontendPlayers[id].destroy();
@@ -1025,14 +1102,14 @@ class Deathmatch extends Phaser.Scene {
             22: 'skin1_ar',
             23: 'skin1_sniper'
         };
-    
+
         const weaponDefaults = {
             1: 'Pistol',
             2: 'Shotgun',
             3: 'AR',
             4: 'Sniper'
         };
-    
+
         return skinMap[skinId] || weaponDefaults[weaponId];
     }
 

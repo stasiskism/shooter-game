@@ -1,4 +1,4 @@
-/* global Phaser, socket */ 
+/* global Phaser, socket */
 import SettingsButtonWithPanel from './options.js'
 
 class Multiplayer extends Phaser.Scene {
@@ -34,12 +34,12 @@ class Multiplayer extends Phaser.Scene {
     fallingObjects = []
 
     badgeEmojiMap = {
-      no_reload: '🎯',
-      close_call: '❤️‍🩹',
-      unlock_all_weapons: '🔫',
-      unlock_all_skins: '🧢',
-      speed_demon: '⚡',
-      no_damage: '🧹'
+        no_reload: '🎯',
+        close_call: '❤️‍🩹',
+        unlock_all_weapons: '🔫',
+        unlock_all_skins: '🧢',
+        speed_demon: '⚡',
+        no_damage: '🧹'
     };
 
 
@@ -83,7 +83,7 @@ class Multiplayer extends Phaser.Scene {
             strokeThickness: 3
         }).setScrollFactor(0).setDepth(999);
     }
-    
+
     onSettingsPanelOpened(panelVisible) {
         this.isPanelVisible = panelVisible;
         if (panelVisible) {
@@ -102,111 +102,91 @@ class Multiplayer extends Phaser.Scene {
     }
 
 
-setupMap() {
-  let key = this.mapKey;
+    setupMap() {
+        let key = this.mapKey;
 
-  // ────────────────────────────────────────────
-  // 1) RANDOMLY‐GENERATED MAP
-  // ────────────────────────────────────────────
-  if (key === 'random') {
-    // dimensions in tiles & pixels
-    const TILE_W = 236;
-    const TILE_H = 173;
-    const MAP_W  = 100;
-    const MAP_H  = 100;
+        const xOffset = (key === 'map2' || key === 'map4' || key === 'random') ? -2000 : 0;
+        const yOffset = (key === 'map2') ? -1000
+            : (key === 'map4') ? -3000
+                : (key === 'random') ? -3000
+                    : 0;
 
-    // a) make an empty tilemap
-    const map = this.make.tilemap({
-      width:     MAP_W,
-      height:    MAP_H,
-      tileWidth: TILE_W,
-      tileHeight:TILE_H
-    });
+        if (key === 'random') {
+            const TILE_W = 236;
+            const TILE_H = 173;
+            const MAP_W = 100;
+            const MAP_H = 100;
 
-    // b) add both tilesets (they must share the same tile size)
-    const ts1 = map.addTilesetImage('rnd1', 'tiles_rnd1', TILE_W, TILE_H);
-    const ts2 = map.addTilesetImage('rnd2', 'tiles_rnd2', TILE_W, TILE_H);
+            const map = this.make.tilemap({
+                width: MAP_W,
+                height: MAP_H,
+                tileWidth: TILE_W,
+                tileHeight: TILE_H
+            });
+            const ts1 = map.addTilesetImage('rnd1', 'tiles_rnd1', TILE_W, TILE_H);
+            const ts2 = map.addTilesetImage('rnd2', 'tiles_rnd2', TILE_W, TILE_H);
 
-    // c) create a blank layer covering the whole map
-    const layer = map.createBlankLayer(
-      'randomLayer',
-      [ ts1, ts2 ],
-      0, 0,
-      MAP_W,
-      MAP_H
-    ).setScale(1);
+            const layer = map.createBlankLayer(
+                'randomLayer',
+                [ts1, ts2],
+                xOffset,
+                yOffset,
+                MAP_W,
+                MAP_H
+            ).setScale(1);
 
-    // d) build a weighted pool of GIDs
-    //    — tiles_rnd1 appears 8× as often as tiles_rnd2
-    const pool = [];
-    const weight1 = 8;
-    const weight2 = 1;
+            const pool = [];
+            const weight1 = 8;
+            const weight2 = 1;
 
-    // ts1 GIDs
-    for (let i = 0; i < ts1.total; i++) {
-      const gid = ts1.firstgid + i;
-      for (let w = 0; w < weight1; w++) {
-        pool.push(gid);
-      }
+            for (let i = 0; i < ts1.total; i++) {
+                const gid = ts1.firstgid + i;
+                for (let w = 0; w < weight1; w++) {
+                    pool.push(gid);
+                }
+            }
+
+            for (let i = 0; i < ts2.total; i++) {
+                const gid = ts2.firstgid + i;
+                for (let w = 0; w < weight2; w++) {
+                    pool.push(gid);
+                }
+            }
+
+            layer.randomize(0, 0, MAP_W, MAP_H, pool);
+
+            return;
+        }
+
+        const map = this.make.tilemap({
+            key: key,
+            tileWidth: 32,
+            tileHeight: 32
+        });
+
+        const tilesetConfigs = {
+            map4: [{ name: "tilsetas_naujam", key: "tiles_multiplayer" }],
+            map2: [{ name: "Mapass", key: "tiles_multiplayer" }]
+        };
+
+        const config = tilesetConfigs[key];
+        if (!config) {
+            console.warn(`No tileset config for map key "${key}"`);
+            return;
+        }
+
+        const phaserTilesets = config.map(ts =>
+            map.addTilesetImage(ts.name, ts.key)
+        );
+
+        map
+            .createLayer("Tile Layer 1", phaserTilesets, xOffset, yOffset)
+            .setScale(1);
     }
 
-    // ts2 GIDs
-    for (let i = 0; i < ts2.total; i++) {
-      const gid = ts2.firstgid + i;
-      for (let w = 0; w < weight2; w++) {
-        pool.push(gid);
-      }
-    }
-
-    // e) fill every cell by randomly drawing from our pool
-    layer.randomize(0, 0, MAP_W, MAP_H, pool);
-
-    return;
-  }
-
-  // ────────────────────────────────────────────
-  // 2) FALLBACK: LOAD A TILED JSON MAP
-  // ────────────────────────────────────────────
-  // a) make the tilemap from your .json
-  const map = this.make.tilemap({
-    key:       key,
-    tileWidth: 32,
-    tileHeight:32
-  });
-
-  // b) per‐map tileset hookup
-  const tilesetConfigs = {
-    map4: [ { name: "tilsetas_naujam", key: "tiles_multiplayer" } ],
-    map2: [ { name: "Mapass",          key: "tiles_multiplayer" } ]
-    // add more maps here…
-  };
-
-  const config = tilesetConfigs[key];
-  if (!config) {
-    console.warn(`No tileset config for map key "${key}"`);
-    return;
-  }
-
-  // c) add each tileset into Phaser
-  const phaserTilesets = config.map(ts =>
-    map.addTilesetImage(ts.name, ts.key)
-  );
-
-  // d) compute any per‐map X/Y offsets
-  const xOffset = (key === 'map2' || key === 'map4') ? -2000 : 0;
-  const yOffset = (key === 'map2') ? -1000
-                : (key === 'map4') ? -3000
-                : 0;
-
-  // e) finally, create the displayed layer
-  map
-    .createLayer("Tile Layer 1", phaserTilesets, xOffset, yOffset)
-    .setScale(1);
-}
 
 
 
-    
 
     gunAnimation() {
         for (const weaponId in this.animationKeys) {
@@ -216,11 +196,11 @@ setupMap() {
             const endShoot = weaponData.endShoot;
             const startReload = weaponData.startReload;
             const endReload = weaponData.endReload;
-    
+
             const reloadTime = this.weaponDetails.reload;
             const reloadFrames = endReload - startReload + 1;
             const reloadFrameRate = reloadFrames / (reloadTime / 1000);
-    
+
             /*if (!this.anims.exists(`singleShot_${weapon}`)) {
                 this.anims.create({
                     key: `singleShot_${weapon}`,
@@ -240,7 +220,7 @@ setupMap() {
             }*/
         }
     }
-    
+
 
     setupScene() {
         const centerX = this.cameras.main.width / 2;
@@ -381,7 +361,7 @@ setupMap() {
         });
 
         socket.on('updatePlayers', backendPlayers => {
-            
+
             const alivePlayers = {};
             for (const id in backendPlayers) {
                 const backendPlayer = backendPlayers[id];
@@ -496,14 +476,14 @@ setupMap() {
         }
         const direction = Math.atan((this.crosshair.x - this.frontendPlayers[socket.id].x) / (this.crosshair.y - this.frontendPlayers[socket.id].y))
         socket.emit('shoot', this.frontendPlayers[socket.id], this.crosshair, direction, this.multiplayerId);
-        socket.emit('gunAnimation', {multiplayerId: this.multiplayerId, playerId: socket.id, animation: 'singleShot', weapon: this.weapon[socket.id]})
+        socket.emit('gunAnimation', { multiplayerId: this.multiplayerId, playerId: socket.id, animation: 'singleShot', weapon: this.weapon[socket.id] })
         this.shootingInterval = setInterval(() => {
             if (this.ammo === 0) return
             if (!this.crosshair || !this.frontendPlayers[socket.id]) return
             const direction = Math.atan((this.crosshair.x - this.frontendPlayers[socket.id].x) / (this.crosshair.y - this.frontendPlayers[socket.id].y))
             this.sound.play(this.weapon[socket.id] + 'Sound', { volume: 0.5 })
             socket.emit('shoot', this.frontendPlayers[socket.id], this.crosshair, direction, this.multiplayerId);
-            socket.emit('gunAnimation', {multiplayerId: this.multiplayerId, playerId: socket.id, animation: 'singleShot', weapon: this.weapon[socket.id]})
+            socket.emit('gunAnimation', { multiplayerId: this.multiplayerId, playerId: socket.id, animation: 'singleShot', weapon: this.weapon[socket.id] })
             //this.frontendWeapons[socket.id].anims.play(`singleShot_${this.weapon[socket.id]}`, true);
         }, firerate); // fire rate based on weapon
 
@@ -514,14 +494,14 @@ setupMap() {
     }
 
     showDamageFlash() {
-    if (!this.damageOverlay) return;
-    this.damageOverlay.setAlpha(0.4);
-    this.tweens.add({
-        targets: this.damageOverlay,
-        alpha: 0,
-        duration: 200,
-        ease: 'Power2'
-    });
+        if (!this.damageOverlay) return;
+        this.damageOverlay.setAlpha(0.4);
+        this.tweens.add({
+            targets: this.damageOverlay,
+            alpha: 0,
+            duration: 200,
+            ease: 'Power2'
+        });
     }
 
     setupPlayer(id, playerData) {
@@ -615,13 +595,13 @@ setupMap() {
                 .setScale(2);
         }
 
-}
+    }
 
     removePlayer(id) {
         if (id === socket.id && !this.gameStop) {
             socket.removeAllListeners()
             this.scene.stop('Multiplayer')
-            this.scene.start('respawn', { multiplayerId: this.multiplayerId, mapSize: this.mapSize})
+            this.scene.start('respawn', { multiplayerId: this.multiplayerId, mapSize: this.mapSize })
             this.playerAmmo.destroy()
             delete this.weaponDetails
         }
@@ -856,7 +836,7 @@ setupMap() {
         socket.off('updateFallingObjects');
         socket.off('playerAnimationUpdate');
         socket.off('weaponStateUpdate');
-        
+
         this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
         const winningText = this.add.text(
             this.cameras.main.width / 2,
@@ -1064,14 +1044,14 @@ setupMap() {
             22: 'skin1_ar',
             23: 'skin1_sniper'
         };
-    
+
         const weaponDefaults = {
             1: 'Pistol',
             2: 'Shotgun',
             3: 'AR',
             4: 'Sniper'
         };
-    
+
         return skinMap[skinId] || weaponDefaults[weaponId];
     }
 
