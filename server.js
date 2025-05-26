@@ -1531,7 +1531,7 @@ function startGame(multiplayerId) {
 
           const mapSize = rooms[multiplayerId].maxPlayers * 250;
           const safeMargin = 200;
-          for (let i = 1; i <= 20; i++) {
+          for (let i = 1; i <= 10; i++) {
             console.log("as")
               const x = Math.floor(Math.random() * ((1920 + mapSize) - 2 * safeMargin)) + safeMargin;
               const y = Math.floor(Math.random() * ((1080 + mapSize) - 2 * safeMargin)) + safeMargin;
@@ -2479,6 +2479,15 @@ setInterval(async () => {
 
                             if (!isSuicide && backendPlayers[killerId]) {
                                 backendPlayers[killerId].kills = (backendPlayers[killerId].kills || 0) + 1;
+
+                                if (
+                                    rooms[barrel.multiplayerId]?.gamemode === 'deathmatch' &&
+                                    !rooms[barrel.multiplayerId]?.gameEnded &&
+                                    backendPlayers[killerId].kills === 2
+                                ) {
+                                    rooms[barrel.multiplayerId].gameEnded = true;
+                                    io.to(barrel.multiplayerId).emit('gameWon', backendPlayers[killerId].username);
+                                }
 
                                 const client = await sql.connect();
                                 const killerName = backendPlayers[killerId].username;
